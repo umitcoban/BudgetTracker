@@ -1,7 +1,11 @@
 package com.umit.budgettracker.feature.expense
 
+import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,7 +15,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -22,8 +30,15 @@ import com.umit.budgettracker.core.ui.IconMapper
 import com.umit.budgettracker.core.util.InstallmentUtils
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,6 +103,7 @@ fun ExpenseScreen(
         if (showDialog) {
             ExpenseDialog(
                 existingExpense = editingExpense,
+                selectedMonth = selectedMonth,
                 onDismiss = { showDialog = false },
                 onConfirmSingle = { expense ->
                     if (editingExpense != null) {
@@ -189,6 +205,7 @@ fun ExpenseRow(
 @Composable
 fun ExpenseDialog(
     existingExpense: Expense?,
+    selectedMonth: YearMonth,
     onDismiss: () -> Unit,
     onConfirmSingle: (Expense) -> Unit,
     onConfirmInstallment: (InstallmentGroup, List<Expense>) -> Unit,
@@ -202,17 +219,23 @@ fun ExpenseDialog(
     var amountText by remember { mutableStateOf(existingExpense?.let { (it.amount / 100).toString() } ?: "") }
     var selectedCategory by remember { mutableStateOf(existingExpense?.category ?: categories.firstOrNull()) }
     var selectedAccount by remember { mutableStateOf(existingExpense?.account ?: accounts.firstOrNull()) }
+    var selectedDate by remember(existingExpense?.id, selectedMonth) {
+        mutableStateOf(existingExpense?.expenseDate ?: selectedMonth.defaultExpenseDate())
+    }
     
     var isInstallment by remember { mutableStateOf(false) }
     var installmentCountText by remember { mutableStateOf("2") }
 
     var categoryExpanded by remember { mutableStateOf(false) }
     var accountExpanded by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var previewAttachment by remember { mutableStateOf<ExpenseAttachment?>(null) }
 
     val attachments by attachmentsFlow.collectAsState(emptyList())
     val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { onAddAttachment(it) }
     }
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -232,6 +255,20 @@ fun ExpenseDialog(
                 }
                 item { OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Başlık") }, modifier = Modifier.fillMaxWidth()) }
                 item { OutlinedTextField(value = amountText, onValueChange = { amountText = it }, label = { Text(if (isInstallment) "Toplam Tutar (TL)" else "Tutar (TL)") }, modifier = Modifier.fillMaxWidth()) }
+                item {
+                    OutlinedButton(
+                        onClick = { showDatePicker = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Event, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Harcama Tarihi: ${selectedDate.format(dateFormatter)}",
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(Icons.Default.EditCalendar, contentDescription = "Tarih Seç")
+                    }
+                }
                 
                 if (existingExpense == null) {
                     item {
@@ -320,11 +357,38 @@ fun ExpenseDialog(
                 if (existingExpense != null) {
                     item {
                         Text(text = "Fiş Fotoğrafları", style = MaterialTheme.typography.titleSmall)
-                        attachments.forEach { attachment ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(text = attachment.originalFileName ?: "Fotoğraf", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                                IconButton(onClick = { onDeleteAttachment(attachment) }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Sil", modifier = Modifier.size(16.dp))
+                        if (attachments.isEmpty()) {
+                            Text(
+                                text = "Henüz fotoğraf eklenmedi.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            attachments.forEach { attachment ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    AttachmentThumbnail(
+                                        attachment = attachment,
+                                        modifier = Modifier
+                                            .size(56.dp)
+                                            .clickable { previewAttachment = attachment }
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable { previewAttachment = attachment }
+                                    ) {
+                                        Text(text = attachment.originalFileName ?: "Fotoğraf", style = MaterialTheme.typography.bodySmall)
+                                        Text(text = "Görüntülemek için dokunun", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                    }
+                                    IconButton(onClick = { onDeleteAttachment(attachment) }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Sil")
+                                    }
                                 }
                             }
                         }
@@ -353,7 +417,7 @@ fun ExpenseDialog(
                             title = title,
                             totalAmount = amount,
                             installmentCount = iCount,
-                            startDate = LocalDate.now(),
+                            startDate = selectedDate,
                             categoryId = selectedCategory!!.id,
                             paymentAccountId = selectedAccount!!.id,
                             note = null
@@ -362,7 +426,7 @@ fun ExpenseDialog(
                             title = title,
                             totalAmount = amount,
                             count = iCount,
-                            startDate = LocalDate.now(),
+                            startDate = selectedDate,
                             categoryId = selectedCategory!!.id,
                             paymentAccountId = selectedAccount!!.id,
                             paymentSourceType = selectedAccount!!.type,
@@ -375,7 +439,7 @@ fun ExpenseDialog(
                                 id = existingExpense?.id ?: 0,
                                 title = title,
                                 amount = amount,
-                                expenseDate = existingExpense?.expenseDate ?: LocalDate.now(),
+                                expenseDate = selectedDate,
                                 categoryId = selectedCategory!!.id,
                                 paymentAccountId = selectedAccount!!.id,
                                 paymentSourceType = selectedAccount!!.type,
@@ -397,7 +461,150 @@ fun ExpenseDialog(
             }
         }
     )
+
+    if (showDatePicker) {
+        ExpenseDatePickerDialog(
+            selectedDate = selectedDate,
+            onDateSelected = {
+                selectedDate = it
+                showDatePicker = false
+            },
+            onDismiss = { showDatePicker = false }
+        )
+    }
+
+    previewAttachment?.let { attachment ->
+        AttachmentPreviewDialog(
+            attachment = attachment,
+            onDismiss = { previewAttachment = null }
+        )
+    }
 }
 
 @Composable
 fun Color.warningContainer(): Color = Color(0xFFFFF9C4) // Simple yellow for warnings
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExpenseDatePickerDialog(
+    selectedDate: LocalDate,
+    onDateSelected: (LocalDate) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = selectedDate.toUtcMillis()
+    )
+
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        onDateSelected(millis.toLocalDateUtc())
+                    } ?: onDismiss()
+                }
+            ) {
+                Text("Seç")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Vazgeç")
+            }
+        }
+    ) {
+        DatePicker(state = datePickerState)
+    }
+}
+
+@Composable
+private fun AttachmentThumbnail(
+    attachment: ExpenseAttachment,
+    modifier: Modifier = Modifier
+) {
+    AttachmentImage(
+        attachment = attachment,
+        modifier = modifier,
+        contentScale = ContentScale.Crop
+    )
+}
+
+@Composable
+private fun AttachmentPreviewDialog(
+    attachment: ExpenseAttachment,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(attachment.originalFileName ?: "Fiş Fotoğrafı") },
+        text = {
+            AttachmentImage(
+                attachment = attachment,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 240.dp, max = 520.dp),
+                contentScale = ContentScale.Fit
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Kapat")
+            }
+        }
+    )
+}
+
+@Composable
+private fun AttachmentImage(
+    attachment: ExpenseAttachment,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale
+) {
+    val context = LocalContext.current
+    val imageBitmap by produceState<ImageBitmap?>(
+        initialValue = null,
+        key1 = attachment.localPath
+    ) {
+        value = withContext(Dispatchers.IO) {
+            BitmapFactory.decodeFile(File(context.filesDir, attachment.localPath).absolutePath)?.asImageBitmap()
+        }
+    }
+
+    if (imageBitmap != null) {
+        Image(
+            bitmap = imageBitmap!!,
+            contentDescription = attachment.originalFileName ?: "Fiş fotoğrafı",
+            modifier = modifier,
+            contentScale = contentScale
+        )
+    } else {
+        Box(
+            modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.BrokenImage,
+                contentDescription = "Fotoğraf görüntülenemedi",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+private fun YearMonth.defaultExpenseDate(): LocalDate {
+    val today = LocalDate.now()
+    return if (this == YearMonth.from(today)) {
+        today
+    } else {
+        atDay(today.dayOfMonth.coerceAtMost(lengthOfMonth()))
+    }
+}
+
+private fun LocalDate.toUtcMillis(): Long {
+    return atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
+}
+
+private fun Long.toLocalDateUtc(): LocalDate {
+    return Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
+}
