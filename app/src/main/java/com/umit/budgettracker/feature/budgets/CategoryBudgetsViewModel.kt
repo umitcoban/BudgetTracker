@@ -38,11 +38,11 @@ class CategoryBudgetsViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CategoryBudgetsUiState.Loading)
 
-    fun addBudget(categoryId: Long, amount: Long, month: YearMonth) {
+    fun saveBudget(existingBudget: CategoryBudget?, categoryId: Long, amount: Long, month: YearMonth) {
         viewModelScope.launch {
             repository.upsertCategoryBudget(
                 CategoryBudget(
-                    id = 0,
+                    id = existingBudget?.id ?: 0,
                     categoryId = categoryId,
                     yearMonth = month,
                     limitAmount = amount,

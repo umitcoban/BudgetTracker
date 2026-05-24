@@ -8,6 +8,8 @@ import com.umit.budgettracker.core.domain.model.SubscriptionPriceHistory
 import com.umit.budgettracker.core.domain.repository.ExpenseRepository
 import com.umit.budgettracker.core.domain.repository.PaymentAccountRepository
 import com.umit.budgettracker.core.domain.repository.SubscriptionRepository
+import com.umit.budgettracker.core.network.ExchangeRateResult
+import com.umit.budgettracker.core.network.ExchangeRateService
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -26,7 +28,8 @@ class SyncDueSubscriptionExpensesUseCaseTest {
         val useCase = SyncDueSubscriptionExpensesUseCase(
             subscriptionRepository = subscriptionRepository,
             expenseRepository = expenseRepository,
-            accountRepository = accountRepository
+            accountRepository = accountRepository,
+            exchangeRateService = FakeExchangeRateService()
         )
 
         val first = useCase(LocalDate.of(2026, 5, 24))
@@ -41,30 +44,73 @@ class SyncDueSubscriptionExpensesUseCaseTest {
         assertEquals(listOf(12_000L, 12_000L), expenseRepository.saved.map { it.amount })
     }
 
-    private class FakeSubscriptionRepository : SubscriptionRepository {
-        private val subscriptions = MutableStateFlow(
-            listOf(
+    @Test
+    fun invoke_convertsForeignCurrencySubscriptionWithStoredRate() = runBlocking {
+        val subscriptionRepository = FakeSubscriptionRepository(
+            subscriptions = listOf(
                 Subscription(
                     id = 1L,
-                    title = "Spotify",
+                    title = "Euro App",
                     categoryId = 2L,
                     paymentAccountId = 3L,
                     billingDay = 4,
                     isActive = true,
-                    note = null
+                    note = null,
+                    originalCurrency = "EUR",
+                    exchangeRateToTry = 35_0000L,
+                    exchangeRateScale = 10_000,
+                    exchangeRateSource = "MANUAL",
+                    exchangeRateUpdatedAt = 1L
                 )
-            )
-        )
-        private val histories = MutableStateFlow(
-            listOf(
+            ),
+            histories = listOf(
                 SubscriptionPriceHistory(
                     id = 1L,
                     subscriptionId = 1L,
-                    amount = 12_000L,
-                    effectiveFromMonth = YearMonth.of(2026, 4)
+                    amount = 800L,
+                    effectiveFromMonth = YearMonth.of(2026, 5)
                 )
             )
         )
+        val expenseRepository = FakeExpenseRepository()
+        val useCase = SyncDueSubscriptionExpensesUseCase(
+            subscriptionRepository = subscriptionRepository,
+            expenseRepository = expenseRepository,
+            accountRepository = FakePaymentAccountRepository(),
+            exchangeRateService = FakeExchangeRateService()
+        )
+
+        val result = useCase(LocalDate.of(2026, 5, 24))
+
+        assertEquals(1, result.createdCount)
+        assertEquals(28_000L, expenseRepository.saved.single().amount)
+        assertEquals(800L, expenseRepository.saved.single().originalAmount)
+        assertEquals("EUR", expenseRepository.saved.single().originalCurrency)
+    }
+
+    private class FakeSubscriptionRepository(
+        subscriptions: List<Subscription> = listOf(
+            Subscription(
+                id = 1L,
+                title = "Spotify",
+                categoryId = 2L,
+                paymentAccountId = 3L,
+                billingDay = 4,
+                isActive = true,
+                note = null
+            )
+        ),
+        histories: List<SubscriptionPriceHistory> = listOf(
+            SubscriptionPriceHistory(
+                id = 1L,
+                subscriptionId = 1L,
+                amount = 12_000L,
+                effectiveFromMonth = YearMonth.of(2026, 4)
+            )
+        )
+    ) : SubscriptionRepository {
+        private val subscriptions = MutableStateFlow(subscriptions)
+        private val histories = MutableStateFlow(histories)
 
         override fun observeActiveSubscriptions(): Flow<List<Subscription>> = subscriptions
         override fun observeAllSubscriptions(): Flow<List<Subscription>> = subscriptions
@@ -106,6 +152,12 @@ class SyncDueSubscriptionExpensesUseCaseTest {
         override fun observeActiveAccounts(): Flow<List<PaymentAccount>> = flowOf(emptyList())
         override suspend fun getAccountById(id: Long): PaymentAccount {
             return PaymentAccount(id = id, name = "Banka", type = AccountType.BANK_ACCOUNT, statementDay = null, dueDay = null, isActive = true)
+        }
+    }
+
+    private class FakeExchangeRateService : ExchangeRateService() {
+        override suspend fun fetchRateToTry(currency: String): Result<ExchangeRateResult> {
+            return Result.failure(IllegalStateException("No network in unit test"))
         }
     }
 }

@@ -13,6 +13,11 @@ data class SubscriptionEntity(
     val isActive: Boolean = true,
     val note: String? = null,
     val cancelledFromMonth: String? = null,
+    val originalCurrency: String? = null,
+    val exchangeRateToTry: Long? = null,
+    val exchangeRateScale: Int? = null,
+    val exchangeRateSource: String? = null,
+    val exchangeRateUpdatedAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

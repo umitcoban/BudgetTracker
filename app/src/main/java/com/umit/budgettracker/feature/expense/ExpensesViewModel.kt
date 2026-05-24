@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.umit.budgettracker.core.domain.model.*
 import com.umit.budgettracker.core.domain.repository.*
+import com.umit.budgettracker.core.network.ExchangeRateResult
+import com.umit.budgettracker.core.network.ExchangeRateService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -18,7 +20,9 @@ class ExpensesViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
     private val accountRepository: PaymentAccountRepository,
     private val installmentRepository: InstallmentRepository,
-    private val attachmentRepository: ExpenseAttachmentRepository
+    private val attachmentRepository: ExpenseAttachmentRepository,
+    private val adjustmentRepository: ExpenseAdjustmentRepository,
+    private val exchangeRateService: ExchangeRateService
 ) : ViewModel() {
 
     private val _selectedMonth = MutableStateFlow(YearMonth.now())
@@ -35,6 +39,9 @@ class ExpensesViewModel @Inject constructor(
 
     val accounts: StateFlow<List<PaymentAccount>> = accountRepository.observeActiveAccounts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _exchangeRateState = MutableStateFlow<ExchangeRateUiState>(ExchangeRateUiState.Idle)
+    val exchangeRateState: StateFlow<ExchangeRateUiState> = _exchangeRateState.asStateFlow()
 
     fun nextMonth() {
         _selectedMonth.value = _selectedMonth.value.plusMonths(1)
@@ -83,4 +90,58 @@ class ExpensesViewModel @Inject constructor(
             attachmentRepository.deleteAttachment(attachment)
         }
     }
+
+    fun getAdjustments(expenseId: Long): Flow<List<ExpenseAdjustment>> {
+        return adjustmentRepository.observeForExpense(expenseId)
+    }
+
+    fun addRefund(expenseId: Long, amount: Long, note: String?) {
+        viewModelScope.launch {
+            adjustmentRepository.addAdjustment(
+                ExpenseAdjustment(
+                    id = 0,
+                    expenseId = expenseId,
+                    amount = amount,
+                    type = ExpenseAdjustmentType.REFUND,
+                    adjustmentDate = java.time.LocalDate.now(),
+                    note = note
+                )
+            )
+        }
+    }
+
+    fun deleteAdjustment(adjustment: ExpenseAdjustment) {
+        viewModelScope.launch {
+            adjustmentRepository.deleteAdjustment(adjustment)
+        }
+    }
+
+    fun fetchExchangeRate(currency: String) {
+        if (currency == "TRY") {
+            _exchangeRateState.value = ExchangeRateUiState.Idle
+            return
+        }
+
+        viewModelScope.launch {
+            _exchangeRateState.value = ExchangeRateUiState.Loading
+            exchangeRateService.fetchRateToTry(currency)
+                .onSuccess { _exchangeRateState.value = ExchangeRateUiState.Success(it) }
+                .onFailure {
+                    _exchangeRateState.value = ExchangeRateUiState.Error(
+                        "Kur bilgisi alınamadı. Manuel kur girebilirsiniz."
+                    )
+                }
+        }
+    }
+
+    fun clearExchangeRateState() {
+        _exchangeRateState.value = ExchangeRateUiState.Idle
+    }
+}
+
+sealed interface ExchangeRateUiState {
+    data object Idle : ExchangeRateUiState
+    data object Loading : ExchangeRateUiState
+    data class Success(val rate: ExchangeRateResult) : ExchangeRateUiState
+    data class Error(val message: String) : ExchangeRateUiState
 }

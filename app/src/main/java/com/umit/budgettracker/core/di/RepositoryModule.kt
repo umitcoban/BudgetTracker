@@ -63,4 +63,16 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindExpenseAttachmentRepository(impl: ExpenseAttachmentRepositoryImpl): ExpenseAttachmentRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCreditCardStatementPaymentRepository(
+        impl: CreditCardStatementPaymentRepositoryImpl
+    ): CreditCardStatementPaymentRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindExpenseAdjustmentRepository(
+        impl: ExpenseAdjustmentRepositoryImpl
+    ): ExpenseAdjustmentRepository
 }

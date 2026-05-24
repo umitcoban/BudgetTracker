@@ -12,6 +12,7 @@ class MonthlyBudgetCalculator @Inject constructor(
     private val savingGoalRepository: SavingGoalRepository,
     private val expenseRepository: ExpenseRepository,
     private val budgetRepository: CategoryBudgetRepository,
+    private val adjustmentRepository: ExpenseAdjustmentRepository,
     private val subscriptionCalculator: SubscriptionMonthlyCalculator,
     private val loanCalculator: LoanMonthlyCalculator
 ) {
@@ -19,14 +20,16 @@ class MonthlyBudgetCalculator @Inject constructor(
         val baseFlow = combine(
             salaryRepository.observeAllSalaryRules(),
             savingGoalRepository.observeSavingGoalForMonth(month),
-            expenseRepository.observeExpensesForMonth(month),
-            budgetRepository.observeBudgetsForMonth(month)
-        ) { salaryRules, savingGoal, expenses, budgets ->
+            expenseRepository.observeAllExpenses(),
+            budgetRepository.observeBudgetsForMonth(month),
+            adjustmentRepository.observeAllAdjustments()
+        ) { salaryRules, savingGoal, expenses, budgets, adjustments ->
             MonthlyBudgetInputs(
                 salaryRules = salaryRules,
                 savingGoal = savingGoal,
                 expenses = expenses,
-                budgets = budgets
+                budgets = budgets,
+                adjustments = adjustments
             )
         }
 
@@ -39,13 +42,26 @@ class MonthlyBudgetCalculator @Inject constructor(
                 .filter { !it.effectiveStartMonth.isAfter(month) }
                 .maxByOrNull { it.effectiveStartMonth }?.amount ?: 0L
 
-            val totalExpenses = base.expenses.sumOf { it.amount }
+            val calendarMonthExpenses = base.expenses.filter { YearMonth.from(it.expenseDate) == month }
+            val plannedMonthExpenses = base.expenses.filter { it.planningMonth() == month }
+            val adjustmentsByExpenseId = base.adjustments.groupBy { it.expenseId }
+
+            val totalExpenses = plannedMonthExpenses.sumOf { it.netAmount(adjustmentsByExpenseId) }
             val savingGoalAmount = base.savingGoal?.amount ?: 0L
-            val totalCardExpense = base.expenses.filter { it.paymentSourceType == AccountType.CREDIT_CARD }.sumOf { it.amount }
-            val directExpenses = base.expenses.filter { it.paymentSourceType != AccountType.CREDIT_CARD }.sumOf { it.amount }
+            val totalCardExpense = calendarMonthExpenses
+                .filter { it.paymentSourceType == AccountType.CREDIT_CARD }
+                .sumOf { it.netAmount(adjustmentsByExpenseId) }
+            val creditCardPaymentAmount = plannedMonthExpenses
+                .filter { it.paymentSourceType == AccountType.CREDIT_CARD }
+                .sumOf { it.netAmount(adjustmentsByExpenseId) }
+            val directExpenses = plannedMonthExpenses
+                .filter { it.paymentSourceType != AccountType.CREDIT_CARD }
+                .sumOf { it.netAmount(adjustmentsByExpenseId) }
 
             val totalSubscriptionsUnpaid = subscriptions.filter { !it.isPaid }.sumOf { it.amount }
-            val totalSubscriptionsPaid = base.expenses.filter { it.subscriptionId != null }.sumOf { it.amount }
+            val totalSubscriptionsPaid = plannedMonthExpenses
+                .filter { it.subscriptionId != null }
+                .sumOf { it.netAmount(adjustmentsByExpenseId) }
             val totalSubscriptionsPlanned = subscriptions.sumOf { it.amount }
             val totalLoans = loans.sumOf { it.amount }
 
@@ -55,7 +71,7 @@ class MonthlyBudgetCalculator @Inject constructor(
                 savingGoalAmount = savingGoalAmount,
                 totalExpenseAmount = totalExpenses,
                 calendarCreditCardSpendingAmount = totalCardExpense,
-                creditCardPaymentAmount = 0L,
+                creditCardPaymentAmount = creditCardPaymentAmount,
                 directExpenseAmount = directExpenses,
                 subscriptionAmount = totalSubscriptionsUnpaid,
                 subscriptionPlannedAmount = totalSubscriptionsPlanned,
@@ -63,7 +79,9 @@ class MonthlyBudgetCalculator @Inject constructor(
                 subscriptionUnpaidPlannedAmount = totalSubscriptionsUnpaid,
                 loanPaymentAmount = totalLoans,
                 categorySummaries = base.budgets.map { budget ->
-                    val spent = base.expenses.filter { it.categoryId == budget.categoryId }.sumOf { it.amount }
+                    val spent = plannedMonthExpenses
+                        .filter { it.categoryId == budget.categoryId }
+                        .sumOf { it.netAmount(adjustmentsByExpenseId) }
                     CategorySummary(
                         categoryId = budget.categoryId,
                         categoryName = budget.category?.name ?: "Bilinmeyen",
@@ -78,9 +96,38 @@ class MonthlyBudgetCalculator @Inject constructor(
     }
 }
 
+private fun Expense.netAmount(adjustmentsByExpenseId: Map<Long, List<ExpenseAdjustment>>): Long {
+    val adjustmentTotal = adjustmentsByExpenseId[id].orEmpty().sumOf { it.amount }
+    return (amount - adjustmentTotal).coerceAtLeast(0L)
+}
+
+private fun Expense.planningMonth(): YearMonth {
+    if (paymentSourceType != AccountType.CREDIT_CARD) {
+        return YearMonth.from(expenseDate)
+    }
+
+    val account = account ?: return YearMonth.from(expenseDate)
+    val statementDay = account.statementDay ?: return YearMonth.from(expenseDate)
+    val dueDay = account.dueDay ?: return YearMonth.from(expenseDate)
+
+    val expenseMonth = YearMonth.from(expenseDate)
+    val statementEndMonth = if (expenseDate.dayOfMonth <= statementDay.coerceAtMost(expenseMonth.lengthOfMonth())) {
+        expenseMonth
+    } else {
+        expenseMonth.plusMonths(1)
+    }
+
+    return if (dueDay <= statementDay) {
+        statementEndMonth.plusMonths(1)
+    } else {
+        statementEndMonth
+    }
+}
+
 private data class MonthlyBudgetInputs(
     val salaryRules: List<SalaryRule>,
     val savingGoal: MonthlySavingGoal?,
     val expenses: List<Expense>,
-    val budgets: List<CategoryBudget>
+    val budgets: List<CategoryBudget>,
+    val adjustments: List<ExpenseAdjustment>
 )

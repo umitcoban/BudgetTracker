@@ -45,6 +45,24 @@ fun PaymentAccount.toEntity() = PaymentAccountEntity(
     isActive = isActive
 )
 
+fun CreditCardStatementPaymentEntity.toDomain() = CreditCardStatementPayment(
+    id = id,
+    accountId = accountId,
+    paymentMonth = YearMonth.parse(paymentMonth),
+    amountAtPayment = amountAtPayment,
+    isPaid = isPaid,
+    paidAt = paidAt
+)
+
+fun CreditCardStatementPayment.toEntity() = CreditCardStatementPaymentEntity(
+    id = id,
+    accountId = accountId,
+    paymentMonth = paymentMonth.toString(),
+    amountAtPayment = amountAtPayment,
+    isPaid = isPaid,
+    paidAt = paidAt
+)
+
 fun SalaryRuleEntity.toDomain() = SalaryRule(
     id = id,
     amount = amount,
@@ -83,6 +101,12 @@ fun ExpenseEntity.toDomain(category: Category? = null, account: PaymentAccount? 
     installmentGroupId = installmentGroupId,
     subscriptionId = subscriptionId,
     loanId = loanId,
+    originalAmount = originalAmount,
+    originalCurrency = originalCurrency,
+    exchangeRateToTry = exchangeRateToTry,
+    exchangeRateScale = exchangeRateScale,
+    exchangeRateSource = exchangeRateSource,
+    exchangeRateUpdatedAt = exchangeRateUpdatedAt,
     category = category,
     account = account
 )
@@ -98,7 +122,31 @@ fun Expense.toEntity() = ExpenseEntity(
     note = note,
     installmentGroupId = installmentGroupId,
     subscriptionId = subscriptionId,
-    loanId = loanId
+    loanId = loanId,
+    originalAmount = originalAmount,
+    originalCurrency = originalCurrency,
+    exchangeRateToTry = exchangeRateToTry,
+    exchangeRateScale = exchangeRateScale,
+    exchangeRateSource = exchangeRateSource,
+    exchangeRateUpdatedAt = exchangeRateUpdatedAt
+)
+
+fun ExpenseAdjustmentEntity.toDomain() = ExpenseAdjustment(
+    id = id,
+    expenseId = expenseId,
+    amount = amount,
+    type = ExpenseAdjustmentType.valueOf(type),
+    adjustmentDate = LocalDate.ofEpochDay(adjustmentDate),
+    note = note
+)
+
+fun ExpenseAdjustment.toEntity() = ExpenseAdjustmentEntity(
+    id = id,
+    expenseId = expenseId,
+    amount = amount,
+    type = type.name,
+    adjustmentDate = adjustmentDate.toEpochDay(),
+    note = note
 )
 
 fun SubscriptionEntity.toDomain(category: Category? = null, account: PaymentAccount? = null) = Subscription(
@@ -110,6 +158,11 @@ fun SubscriptionEntity.toDomain(category: Category? = null, account: PaymentAcco
     isActive = isActive,
     note = note,
     cancelledFromMonth = cancelledFromMonth?.let { YearMonth.parse(it) },
+    originalCurrency = originalCurrency,
+    exchangeRateToTry = exchangeRateToTry,
+    exchangeRateScale = exchangeRateScale,
+    exchangeRateSource = exchangeRateSource,
+    exchangeRateUpdatedAt = exchangeRateUpdatedAt,
     category = category,
     account = account
 )
@@ -122,7 +175,12 @@ fun Subscription.toEntity() = SubscriptionEntity(
     billingDay = billingDay,
     isActive = isActive,
     note = note,
-    cancelledFromMonth = cancelledFromMonth?.toString()
+    cancelledFromMonth = cancelledFromMonth?.toString(),
+    originalCurrency = originalCurrency,
+    exchangeRateToTry = exchangeRateToTry,
+    exchangeRateScale = exchangeRateScale,
+    exchangeRateSource = exchangeRateSource,
+    exchangeRateUpdatedAt = exchangeRateUpdatedAt
 )
 
 fun SubscriptionPriceHistoryEntity.toDomain() = SubscriptionPriceHistory(

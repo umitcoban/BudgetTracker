@@ -39,6 +39,12 @@ data class ExpenseEntity(
     val installmentGroupId: Long? = null,
     val subscriptionId: Long? = null,
     val loanId: Long? = null,
+    val originalAmount: Long? = null,
+    val originalCurrency: String? = null,
+    val exchangeRateToTry: Long? = null,
+    val exchangeRateScale: Int? = null,
+    val exchangeRateSource: String? = null,
+    val exchangeRateUpdatedAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
