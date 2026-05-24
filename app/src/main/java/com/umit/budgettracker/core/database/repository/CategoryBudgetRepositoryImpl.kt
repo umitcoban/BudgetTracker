@@ -17,7 +17,7 @@ class CategoryBudgetRepositoryImpl @Inject constructor(
 ) : CategoryBudgetRepository {
     override fun observeBudgetsForMonth(yearMonth: YearMonth): Flow<List<CategoryBudget>> {
         return budgetDao.getByMonth(yearMonth.toString()).map { entities ->
-            entities.map { entity ->
+            entities.deduplicateByCategoryAndMonth().map { entity ->
                 val category = categoryDao.getById(entity.categoryId)?.toDomain()
                 entity.toDomain(category)
             }
@@ -26,7 +26,7 @@ class CategoryBudgetRepositoryImpl @Inject constructor(
 
     override fun observeAllBudgets(): Flow<List<CategoryBudget>> {
         return budgetDao.getAll().map { entities ->
-            entities.map { entity ->
+            entities.deduplicateByCategoryAndMonth().map { entity ->
                 val category = categoryDao.getById(entity.categoryId)?.toDomain()
                 entity.toDomain(category)
             }
@@ -43,10 +43,36 @@ class CategoryBudgetRepositoryImpl @Inject constructor(
     }
 
     override suspend fun upsertCategoryBudget(budget: CategoryBudget) {
-        budgetDao.insert(budget.toEntity())
+        val existingBudgetsForCategoryAndMonth = budgetDao.getAllByCategoryAndMonth(
+            categoryId = budget.categoryId,
+            yearMonth = budget.yearMonth.toString()
+        )
+        val existingForCategoryAndMonth = existingBudgetsForCategoryAndMonth.firstOrNull()
+        val targetId = existingForCategoryAndMonth?.id ?: budget.id
+
+        if (
+            budget.id != 0L &&
+            existingForCategoryAndMonth != null &&
+            existingForCategoryAndMonth.id != budget.id
+        ) {
+            budgetDao.deleteById(budget.id)
+        }
+
+        existingBudgetsForCategoryAndMonth
+            .filter { it.id != targetId }
+            .forEach { budgetDao.deleteById(it.id) }
+
+        budgetDao.insert(budget.toEntity().copy(id = targetId))
     }
 
     override suspend fun deleteCategoryBudget(budget: CategoryBudget) {
         budgetDao.delete(budget.toEntity())
     }
 }
+
+private fun List<com.umit.budgettracker.core.database.entity.CategoryBudgetEntity>.deduplicateByCategoryAndMonth() =
+    sortedWith(
+        compareBy<com.umit.budgettracker.core.database.entity.CategoryBudgetEntity> { it.yearMonth }
+            .thenBy { it.categoryId }
+            .thenByDescending { it.id }
+    ).distinctBy { it.yearMonth to it.categoryId }

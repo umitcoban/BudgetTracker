@@ -28,7 +28,13 @@ class MarkSubscriptionPaymentAsPaidUseCase @Inject constructor(
                 paymentAccountId = payment.paymentAccountId,
                 paymentSourceType = payment.account?.type ?: AccountType.CASH,
                 note = "Abonelik ödemesi",
-                subscriptionId = payment.subscriptionId
+                subscriptionId = payment.subscriptionId,
+                originalAmount = payment.originalAmount.takeIf { payment.originalCurrency != null },
+                originalCurrency = payment.originalCurrency,
+                exchangeRateToTry = payment.exchangeRateToTry,
+                exchangeRateScale = payment.exchangeRateScale,
+                exchangeRateSource = payment.exchangeRateSource,
+                exchangeRateUpdatedAt = payment.exchangeRateUpdatedAt
             )
         )
 

@@ -91,14 +91,20 @@ fun CategoryBudgetsScreen(
                 }
                 
                 if (showDialog) {
+                    val budgetedCategoryIds = state.budgets
+                        .map { it.categoryId }
+                        .filter { it != selectedBudget?.categoryId }
+                        .toSet()
                     CategoryBudgetDialog(
                         existingBudget = selectedBudget,
                         onDismiss = { showDialog = false },
                         onConfirm = { catId, amount ->
-                            viewModel.addBudget(catId, amount, selectedMonth)
+                            viewModel.saveBudget(selectedBudget, catId, amount, selectedMonth)
                             showDialog = false
                         },
-                        categories = state.categories.filter { it.type == CategoryType.EXPENSE || it.type == CategoryType.SYSTEM }
+                        categories = state.categories
+                            .filter { it.type == CategoryType.EXPENSE || it.type == CategoryType.SYSTEM }
+                            .filter { it.id !in budgetedCategoryIds }
                     )
                 }
             }

@@ -24,14 +24,16 @@ class JsonExportService @Inject constructor(
     private val templateRepository: ExpenseTemplateRepository,
     private val debtRepository: DebtRepository,
     private val netWorthRepository: NetWorthRepository,
-    private val attachmentRepository: ExpenseAttachmentRepository
+    private val attachmentRepository: ExpenseAttachmentRepository,
+    private val statementPaymentRepository: CreditCardStatementPaymentRepository,
+    private val adjustmentRepository: ExpenseAdjustmentRepository
 ) {
     private val json = Json { prettyPrint = true }
 
     suspend fun exportToJson(uri: Uri): ExportResult {
         return try {
             val dto = BudgetTrackerExportDto(
-                schemaVersion = 2,
+                schemaVersion = 6,
                 exportedAt = Instant.now().toString(),
                 salaryRules = salaryRepository.observeAllSalaryRules().first().map { 
                     SalaryRuleDto(it.id, it.amount, it.effectiveStartMonth.toString(), it.note) 
@@ -46,7 +48,25 @@ class JsonExportService @Inject constructor(
                     PaymentAccountDto(it.id, it.name, it.type.name, it.statementDay, it.dueDay, it.isActive) 
                 },
                 expenses = expenseRepository.observeAllExpenses().first().map { 
-                    ExpenseDto(it.id, it.title, it.amount, it.expenseDate.toEpochDay(), it.categoryId, it.paymentAccountId, it.paymentSourceType.name, it.note, it.installmentGroupId, it.subscriptionId, it.loanId) 
+                    ExpenseDto(
+                        it.id,
+                        it.title,
+                        it.amount,
+                        it.expenseDate.toEpochDay(),
+                        it.categoryId,
+                        it.paymentAccountId,
+                        it.paymentSourceType.name,
+                        it.note,
+                        it.installmentGroupId,
+                        it.subscriptionId,
+                        it.loanId,
+                        it.originalAmount,
+                        it.originalCurrency,
+                        it.exchangeRateToTry,
+                        it.exchangeRateScale,
+                        it.exchangeRateSource,
+                        it.exchangeRateUpdatedAt
+                    )
                 },
                 installmentGroups = installmentRepository.observeInstallmentGroups().first().map { 
                     InstallmentGroupDto(it.id, it.title, it.totalAmount, it.installmentCount, it.startDate.toEpochDay(), it.categoryId, it.paymentAccountId, it.note) 
@@ -55,7 +75,21 @@ class JsonExportService @Inject constructor(
                     LoanDto(it.id, it.title, it.principalAmount, it.monthlyPaymentAmount, it.installmentCount, it.startMonth.toString(), it.paymentDay, it.categoryId, it.paymentAccountId, it.note, it.isActive) 
                 },
                 subscriptions = subscriptionRepository.observeAllSubscriptions().first().map { 
-                    SubscriptionDto(it.id, it.title, it.categoryId, it.paymentAccountId, it.billingDay, it.isActive, it.note, it.cancelledFromMonth?.toString()) 
+                    SubscriptionDto(
+                        it.id,
+                        it.title,
+                        it.categoryId,
+                        it.paymentAccountId,
+                        it.billingDay,
+                        it.isActive,
+                        it.note,
+                        it.cancelledFromMonth?.toString(),
+                        it.originalCurrency,
+                        it.exchangeRateToTry,
+                        it.exchangeRateScale,
+                        it.exchangeRateSource,
+                        it.exchangeRateUpdatedAt
+                    )
                 },
                 subscriptionPriceHistory = subscriptionRepository.observeAllPriceHistory().first().map { 
                     SubscriptionPriceHistoryDto(it.id, it.subscriptionId, it.amount, it.effectiveFromMonth.toString()) 
@@ -74,6 +108,12 @@ class JsonExportService @Inject constructor(
                 },
                 expenseAttachments = attachmentRepository.getAllAttachments().map {
                     ExpenseAttachmentDto(it.id, it.expenseId, it.type.name, it.localPath, it.mimeType, it.originalFileName, it.createdAt)
+                },
+                creditCardStatementPayments = statementPaymentRepository.observeAllPayments().first().map {
+                    CreditCardStatementPaymentDto(it.id, it.accountId, it.paymentMonth.toString(), it.amountAtPayment, it.isPaid, it.paidAt)
+                },
+                expenseAdjustments = adjustmentRepository.observeAllAdjustments().first().map {
+                    ExpenseAdjustmentDto(it.id, it.expenseId, it.amount, it.type.name, it.adjustmentDate.toEpochDay(), it.note)
                 }
             )
 

@@ -29,7 +29,7 @@ class JsonImportService @Inject constructor(
                 return ImportResult.Error("Bu dosya BudgetTracker uygulamasına ait değil.")
             }
             
-            if (dto.schemaVersion > 2) {
+            if (dto.schemaVersion > 6) {
                 return ImportResult.Error("Bu yedek dosyası uygulamanın desteklemediği bir sürüme ait.")
             }
 
@@ -54,6 +54,12 @@ class JsonImportService @Inject constructor(
                 if (dto.schemaVersion >= 2) {
                     db.expenseAttachmentDao().insertAll(dto.expenseAttachments.map { it.toEntity() })
                 }
+                if (dto.schemaVersion >= 3) {
+                    db.creditCardStatementPaymentDao().insertAll(dto.creditCardStatementPayments.map { it.toEntity() })
+                }
+                if (dto.schemaVersion >= 4) {
+                    db.expenseAdjustmentDao().insertAll(dto.expenseAdjustments.map { it.toEntity() })
+                }
             }
 
             ImportResult.Success(
@@ -75,13 +81,47 @@ private fun CategoryDto.toEntity() = com.umit.budgettracker.core.database.entity
 private fun PaymentAccountDto.toEntity() = com.umit.budgettracker.core.database.entity.PaymentAccountEntity(id, name, type, statementDay, dueDay, isActive)
 private fun SalaryRuleDto.toEntity() = com.umit.budgettracker.core.database.entity.SalaryRuleEntity(id, amount, effectiveStartMonth, note)
 private fun MonthlySavingGoalDto.toEntity() = com.umit.budgettracker.core.database.entity.MonthlySavingGoalEntity(yearMonth, amount, note)
-private fun ExpenseDto.toEntity() = com.umit.budgettracker.core.database.entity.ExpenseEntity(id, title, amount, expenseDate, categoryId, paymentAccountId, paymentSourceType, note, installmentGroupId, subscriptionId, loanId)
+private fun ExpenseDto.toEntity() = com.umit.budgettracker.core.database.entity.ExpenseEntity(
+    id = id,
+    title = title,
+    amount = amount,
+    expenseDate = expenseDate,
+    categoryId = categoryId,
+    paymentAccountId = paymentAccountId,
+    paymentSourceType = paymentSourceType,
+    note = note,
+    installmentGroupId = installmentGroupId,
+    subscriptionId = subscriptionId,
+    loanId = loanId,
+    originalAmount = originalAmount,
+    originalCurrency = originalCurrency,
+    exchangeRateToTry = exchangeRateToTry,
+    exchangeRateScale = exchangeRateScale,
+    exchangeRateSource = exchangeRateSource,
+    exchangeRateUpdatedAt = exchangeRateUpdatedAt
+)
 private fun InstallmentGroupDto.toEntity() = com.umit.budgettracker.core.database.entity.InstallmentGroupEntity(id, title, totalAmount, installmentCount, startDate, categoryId, paymentAccountId, note)
 private fun LoanDto.toEntity() = com.umit.budgettracker.core.database.entity.LoanEntity(id, title, principalAmount, monthlyPaymentAmount, installmentCount, startMonth, paymentDay, categoryId, paymentAccountId, note, isActive)
-private fun SubscriptionDto.toEntity() = com.umit.budgettracker.core.database.entity.SubscriptionEntity(id, title, categoryId, paymentAccountId, billingDay, isActive, note, cancelledFromMonth)
+private fun SubscriptionDto.toEntity() = com.umit.budgettracker.core.database.entity.SubscriptionEntity(
+    id = id,
+    title = title,
+    categoryId = categoryId,
+    paymentAccountId = paymentAccountId,
+    billingDay = billingDay,
+    isActive = isActive,
+    note = note,
+    cancelledFromMonth = cancelledFromMonth,
+    originalCurrency = originalCurrency,
+    exchangeRateToTry = exchangeRateToTry,
+    exchangeRateScale = exchangeRateScale,
+    exchangeRateSource = exchangeRateSource,
+    exchangeRateUpdatedAt = exchangeRateUpdatedAt
+)
 private fun SubscriptionPriceHistoryDto.toEntity() = com.umit.budgettracker.core.database.entity.SubscriptionPriceHistoryEntity(id, subscriptionId, amount, effectiveFromMonth)
 private fun CategoryBudgetDto.toEntity() = com.umit.budgettracker.core.database.entity.CategoryBudgetEntity(id, categoryId, yearMonth, limitAmount, note)
 private fun ExpenseTemplateDto.toEntity() = com.umit.budgettracker.core.database.entity.ExpenseTemplateEntity(id, title, defaultAmount, categoryId, paymentAccountId, note, isActive)
 private fun DebtRecordDto.toEntity() = com.umit.budgettracker.core.database.entity.DebtRecordEntity(id, title, personName, amount, type, dueDate, isPaid, note)
 private fun NetWorthSnapshotDto.toEntity() = com.umit.budgettracker.core.database.entity.NetWorthSnapshotEntity(id, yearMonth, cashAmount, bankAmount, investmentAmount, creditCardDebt, loanDebt, note)
 private fun ExpenseAttachmentDto.toEntity() = com.umit.budgettracker.core.database.entity.ExpenseAttachmentEntity(id, expenseId, type, localPath, mimeType, originalFileName, createdAt)
+private fun CreditCardStatementPaymentDto.toEntity() = com.umit.budgettracker.core.database.entity.CreditCardStatementPaymentEntity(id, accountId, paymentMonth, amountAtPayment, isPaid, paidAt)
+private fun ExpenseAdjustmentDto.toEntity() = com.umit.budgettracker.core.database.entity.ExpenseAdjustmentEntity(id, expenseId, amount, type, adjustmentDate, note)

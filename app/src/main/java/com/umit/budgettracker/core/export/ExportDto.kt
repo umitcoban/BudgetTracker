@@ -20,7 +20,9 @@ data class BudgetTrackerExportDto(
     val expenseTemplates: List<ExpenseTemplateDto>,
     val debtRecords: List<DebtRecordDto>,
     val netWorthSnapshots: List<NetWorthSnapshotDto>,
-    val expenseAttachments: List<ExpenseAttachmentDto> = emptyList()
+    val expenseAttachments: List<ExpenseAttachmentDto> = emptyList(),
+    val creditCardStatementPayments: List<CreditCardStatementPaymentDto> = emptyList(),
+    val expenseAdjustments: List<ExpenseAdjustmentDto> = emptyList()
 )
 
 @Serializable
@@ -47,7 +49,13 @@ data class ExpenseDto(
     val note: String?,
     val installmentGroupId: Long?,
     val subscriptionId: Long? = null,
-    val loanId: Long? = null
+    val loanId: Long? = null,
+    val originalAmount: Long? = null,
+    val originalCurrency: String? = null,
+    val exchangeRateToTry: Long? = null,
+    val exchangeRateScale: Int? = null,
+    val exchangeRateSource: String? = null,
+    val exchangeRateUpdatedAt: Long? = null
 )
 
 @Serializable
@@ -65,7 +73,12 @@ data class SubscriptionDto(
     val billingDay: Int,
     val isActive: Boolean,
     val note: String?,
-    val cancelledFromMonth: String? = null
+    val cancelledFromMonth: String? = null,
+    val originalCurrency: String? = null,
+    val exchangeRateToTry: Long? = null,
+    val exchangeRateScale: Int? = null,
+    val exchangeRateSource: String? = null,
+    val exchangeRateUpdatedAt: Long? = null
 )
 
 @Serializable
@@ -85,3 +98,23 @@ data class NetWorthSnapshotDto(val id: Long, val yearMonth: String, val cashAmou
 
 @Serializable
 data class ExpenseAttachmentDto(val id: Long, val expenseId: Long, val type: String, val localPath: String, val mimeType: String?, val originalFileName: String?, val createdAt: Long)
+
+@Serializable
+data class CreditCardStatementPaymentDto(
+    val id: Long,
+    val accountId: Long,
+    val paymentMonth: String,
+    val amountAtPayment: Long,
+    val isPaid: Boolean,
+    val paidAt: Long?
+)
+
+@Serializable
+data class ExpenseAdjustmentDto(
+    val id: Long,
+    val expenseId: Long,
+    val amount: Long,
+    val type: String,
+    val adjustmentDate: Long,
+    val note: String?
+)

@@ -1,10 +1,13 @@
 package com.umit.budgettracker.core.domain.calculator
 
 import com.umit.budgettracker.core.domain.model.SubscriptionMonthlyPayment
+import com.umit.budgettracker.core.network.ExchangeRateService
 import com.umit.budgettracker.core.domain.repository.CategoryRepository
 import com.umit.budgettracker.core.domain.repository.ExpenseRepository
 import com.umit.budgettracker.core.domain.repository.PaymentAccountRepository
 import com.umit.budgettracker.core.domain.repository.SubscriptionRepository
+import java.math.BigDecimal
+import java.math.RoundingMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import java.time.YearMonth
@@ -14,7 +17,8 @@ class SubscriptionMonthlyCalculator @Inject constructor(
     private val subscriptionRepository: SubscriptionRepository,
     private val categoryRepository: CategoryRepository,
     private val accountRepository: PaymentAccountRepository,
-    private val expenseRepository: ExpenseRepository
+    private val expenseRepository: ExpenseRepository,
+    private val exchangeRateService: ExchangeRateService
 ) {
     fun getPaymentsForMonth(month: YearMonth): Flow<List<SubscriptionMonthlyPayment>> {
         return combine(
@@ -28,11 +32,31 @@ class SubscriptionMonthlyCalculator @Inject constructor(
                 SubscriptionRules.contributesToMonth(sub, histories, month)
             }.map { sub ->
                 val isPaid = expenses.any { it.subscriptionId == sub.id }
+                val originalAmount = SubscriptionRules.priceForMonth(sub.id, histories, month) ?: 0L
+                val currency = sub.originalCurrency ?: "TRY"
+                val latestRate = if (currency == "TRY") {
+                    null
+                } else {
+                    exchangeRateService.fetchRateToTry(currency).getOrNull()
+                }
+                val rateToTry = latestRate?.rateToTry ?: sub.exchangeRateToTry
+                val rateScale = latestRate?.rateScale ?: sub.exchangeRateScale
+                val amount = if (currency == "TRY") {
+                    originalAmount
+                } else {
+                    calculateTryMinorAmount(originalAmount, rateToTry, rateScale)
+                }
 
                 SubscriptionMonthlyPayment(
                     subscriptionId = sub.id,
                     title = sub.title,
-                    amount = SubscriptionRules.priceForMonth(sub.id, histories, month) ?: 0L,
+                    amount = amount,
+                    originalAmount = originalAmount,
+                    originalCurrency = currency.takeIf { it != "TRY" },
+                    exchangeRateToTry = rateToTry.takeIf { currency != "TRY" },
+                    exchangeRateScale = rateScale.takeIf { currency != "TRY" },
+                    exchangeRateSource = latestRate?.source ?: sub.exchangeRateSource,
+                    exchangeRateUpdatedAt = System.currentTimeMillis().takeIf { latestRate != null } ?: sub.exchangeRateUpdatedAt,
                     billingDay = sub.billingDay,
                     categoryId = sub.categoryId,
                     paymentAccountId = sub.paymentAccountId,
@@ -43,4 +67,12 @@ class SubscriptionMonthlyCalculator @Inject constructor(
             }
         }
     }
+}
+
+private fun calculateTryMinorAmount(originalAmount: Long, exchangeRateToTry: Long?, exchangeRateScale: Int?): Long {
+    if (exchangeRateToTry == null || exchangeRateScale == null) return 0L
+    return BigDecimal(originalAmount)
+        .multiply(BigDecimal(exchangeRateToTry))
+        .divide(BigDecimal(exchangeRateScale), 0, RoundingMode.HALF_UP)
+        .longValueExact()
 }

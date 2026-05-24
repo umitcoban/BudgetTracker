@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
@@ -21,6 +22,8 @@ import com.umit.budgettracker.core.domain.model.*
 import com.umit.budgettracker.core.ui.IconMapper
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.YearMonth
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -32,6 +35,7 @@ fun SubscriptionsScreen(
     val selectedMonth by viewModel.selectedMonth.collectAsState()
     val monthlyPayments by viewModel.monthlyPayments.collectAsState()
     val allSubscriptions by viewModel.allSubscriptions.collectAsState()
+    val exchangeRateState by viewModel.exchangeRateState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     
     var showDialog by remember { mutableStateOf(false) }
@@ -88,7 +92,7 @@ fun SubscriptionsScreen(
                         onMarkPaid = { viewModel.markAsPaid(payment) },
                         onEdit = {
                             editingSub = allSubscriptions.find { it.id == payment.subscriptionId }
-                            currentEditAmount = payment.amount
+                            currentEditAmount = payment.originalAmount ?: payment.amount
                             showDialog = true
                         }
                     )
@@ -101,9 +105,10 @@ fun SubscriptionsScreen(
                 existingSub = editingSub,
                 currentAmount = currentEditAmount,
                 currentMonth = selectedMonth,
+                exchangeRateState = exchangeRateState,
                 onDismiss = { showDialog = false },
-                onConfirmAdd = { title, amount, bDay, catId, accId, month ->
-                    viewModel.addSubscription(title, amount, bDay, catId, accId, month)
+                onConfirmAdd = { title, amount, bDay, catId, accId, month, currency, rate, rateScale, rateSource, rateUpdatedAt ->
+                    viewModel.addSubscription(title, amount, bDay, catId, accId, month, currency, rate, rateScale, rateSource, rateUpdatedAt)
                     showDialog = false
                 },
                 onConfirmUpdate = { sub, amount, month ->
@@ -122,11 +127,48 @@ fun SubscriptionsScreen(
                     viewModel.deleteSubscription(sub)
                     showDialog = false
                 },
+                onFetchExchangeRate = { viewModel.fetchExchangeRate(it) },
+                onClearExchangeRateState = { viewModel.clearExchangeRateState() },
                 categories = viewModel.categories.collectAsState().value,
                 accounts = viewModel.accounts.collectAsState().value
             )
         }
     }
+}
+
+private const val RATE_SCALE = 10_000
+
+private fun parseRateToScale(text: String): Long? {
+    return text
+        .replace(',', '.')
+        .toBigDecimalOrNull()
+        ?.takeIf { it > BigDecimal.ZERO }
+        ?.multiply(BigDecimal(RATE_SCALE))
+        ?.setScale(0, RoundingMode.HALF_UP)
+        ?.longValueExact()
+}
+
+private fun calculateTryMinorAmount(originalAmount: Long, exchangeRateToTry: Long?): Long {
+    if (exchangeRateToTry == null) return 0L
+    return BigDecimal(originalAmount)
+        .multiply(BigDecimal(exchangeRateToTry))
+        .divide(BigDecimal(RATE_SCALE), 0, RoundingMode.HALF_UP)
+        .longValueExact()
+}
+
+private fun Long.formatRate(scale: Int?): String {
+    val actualScale = scale ?: RATE_SCALE
+    return BigDecimal(this)
+        .divide(BigDecimal(actualScale), 4, RoundingMode.HALF_UP)
+        .stripTrailingZeros()
+        .toPlainString()
+}
+
+private fun Long.formatMinor(): String {
+    return BigDecimal(this)
+        .divide(BigDecimal(100), 2, RoundingMode.HALF_UP)
+        .stripTrailingZeros()
+        .toPlainString()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -155,6 +197,13 @@ fun SubscriptionPaymentRow(
                     color = if (payment.isPaid) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
                 )
                 Text(text = MoneyFormatter.format(payment.amount), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                if (payment.originalCurrency != null && payment.originalAmount != null) {
+                    Text(
+                        text = "${payment.originalAmount.formatMinor()} ${payment.originalCurrency} • Güncel TL karşılığı",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             if (payment.isPaid) {
                 Icon(Icons.Default.Check, contentDescription = "Ödendi", tint = Color(0xFF4CAF50))
@@ -176,17 +225,27 @@ fun SubscriptionDialog(
     existingSub: Subscription?,
     currentAmount: Long?,
     currentMonth: YearMonth,
+    exchangeRateState: SubscriptionExchangeRateUiState,
     onDismiss: () -> Unit,
-    onConfirmAdd: (String, Long, Int, Long, Long, YearMonth) -> Unit,
+    onConfirmAdd: (String, Long, Int, Long, Long, YearMonth, String, Long?, Int?, String?, Long?) -> Unit,
     onConfirmUpdate: (Subscription, Long?, YearMonth?) -> Unit,
     onCancelSub: (Subscription) -> Unit,
     onDeactivateSub: (Subscription) -> Unit,
     onDeleteSub: (Subscription) -> Unit,
+    onFetchExchangeRate: (String) -> Unit,
+    onClearExchangeRateState: () -> Unit,
     categories: List<Category>,
     accounts: List<PaymentAccount>
 ) {
+    val initialCurrency = existingSub?.originalCurrency ?: "TRY"
     var title by remember { mutableStateOf(existingSub?.title ?: "") }
-    var amountText by remember { mutableStateOf(currentAmount?.let { (it / 100.0).toString() } ?: "") }
+    var selectedCurrency by remember { mutableStateOf(initialCurrency) }
+    var amountText by remember { mutableStateOf(currentAmount?.formatMinor() ?: "") }
+    var exchangeRateText by remember {
+        mutableStateOf(existingSub?.exchangeRateToTry?.formatRate(existingSub.exchangeRateScale) ?: "")
+    }
+    var exchangeRateSource by remember { mutableStateOf(existingSub?.exchangeRateSource) }
+    var exchangeRateUpdatedAt by remember { mutableStateOf(existingSub?.exchangeRateUpdatedAt) }
     var billingDay by remember { mutableStateOf(existingSub?.billingDay?.toString() ?: "1") }
     var selectedCategory by remember { mutableStateOf(existingSub?.category ?: categories.firstOrNull()) }
     var selectedAccount by remember { mutableStateOf(existingSub?.account ?: accounts.firstOrNull()) }
@@ -199,20 +258,49 @@ fun SubscriptionDialog(
 
     var categoryExpanded by remember { mutableStateOf(false) }
     var accountExpanded by remember { mutableStateOf(false) }
+    var currencyExpanded by remember { mutableStateOf(false) }
 
     val amount = remember(amountText) { MoneyFormatter.parse(amountText) }
+    val exchangeRateToTry = remember(exchangeRateText) { parseRateToScale(exchangeRateText) }
+    val calculatedTryAmount = remember(amount, exchangeRateToTry, selectedCurrency) {
+        if (selectedCurrency == "TRY") amount ?: 0L else calculateTryMinorAmount(amount ?: 0L, exchangeRateToTry)
+    }
     val bDay = remember(billingDay) { billingDay.toIntOrNull() ?: 0 }
     val month = remember(effectiveMonthText) { try { YearMonth.parse(effectiveMonthText) } catch (e: Exception) { null } }
-    val priceChanged = existingSub == null || ((amount ?: 0L) > 0 && amount != currentAmount)
+    val currencyChanged = selectedCurrency != initialCurrency
+    val priceChanged = existingSub == null || ((amount ?: 0L) > 0 && (amount != currentAmount || currencyChanged))
+    val supportedCurrencies = remember { listOf("TRY", "USD", "EUR", "GBP") }
+
+    LaunchedEffect(exchangeRateState, selectedCurrency) {
+        when (val state = exchangeRateState) {
+            is SubscriptionExchangeRateUiState.Success -> {
+                if (state.rate.baseCurrency == selectedCurrency) {
+                    exchangeRateText = state.rate.rateToTry.formatRate(state.rate.rateScale)
+                    exchangeRateSource = state.rate.source
+                    exchangeRateUpdatedAt = System.currentTimeMillis()
+                }
+            }
+            else -> Unit
+        }
+    }
+
+    LaunchedEffect(selectedCurrency) {
+        if (selectedCurrency == "TRY") {
+            exchangeRateText = ""
+            exchangeRateSource = null
+            exchangeRateUpdatedAt = null
+            onClearExchangeRateState()
+        }
+    }
     
     val isFormValid = if (existingSub == null) {
-        title.isNotBlank() && (amount ?: 0L) > 0 && bDay in 1..31 && selectedCategory != null && selectedAccount != null && month != null
+        title.isNotBlank() && (amount ?: 0L) > 0 && calculatedTryAmount > 0 && bDay in 1..31 && selectedCategory != null && selectedAccount != null && month != null
     } else {
         title.isNotBlank() &&
             bDay in 1..31 &&
             selectedCategory != null &&
             selectedAccount != null &&
-            (!priceChanged || ((amount ?: 0L) > 0 && month != null))
+            (!priceChanged || ((amount ?: 0L) > 0 && calculatedTryAmount > 0 && month != null))
     }
 
     AlertDialog(
@@ -231,16 +319,92 @@ fun SubscriptionDialog(
                     )
                 }
                 item { 
+                    ExposedDropdownMenuBox(
+                        expanded = currencyExpanded,
+                        onExpandedChange = { currencyExpanded = !currencyExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedCurrency,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Para Birimi") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = currencyExpanded,
+                            onDismissRequest = { currencyExpanded = false }
+                        ) {
+                            supportedCurrencies.forEach { currency ->
+                                DropdownMenuItem(
+                                    text = { Text(currency) },
+                                    onClick = {
+                                        selectedCurrency = currency
+                                        currencyExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                item {
                     OutlinedTextField(
                         value = amountText, 
                         onValueChange = { amountText = it }, 
-                        label = { Text(if (existingSub != null) "Geçerli/Yeni Fiyat (TL)" else "Fiyat (TL)") },
+                        label = { Text(if (existingSub != null) "Geçerli/Yeni Fiyat ($selectedCurrency)" else "Fiyat ($selectedCurrency)") },
                         isError = amountText.isNotBlank() && (amount ?: 0L) <= 0,
                         supportingText = {
                             if (amountText.isNotBlank() && (amount ?: 0L) <= 0) Text("Tutar geçerli değil.")
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) 
+                }
+                if (selectedCurrency != "TRY") {
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedTextField(
+                                value = exchangeRateText,
+                                onValueChange = {
+                                    exchangeRateText = it
+                                    exchangeRateSource = "MANUAL"
+                                    exchangeRateUpdatedAt = System.currentTimeMillis()
+                                },
+                                label = { Text("1 $selectedCurrency kaç TL?") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedButton(
+                                    enabled = exchangeRateState !is SubscriptionExchangeRateUiState.Loading,
+                                    onClick = { onFetchExchangeRate(selectedCurrency) }
+                                ) {
+                                    Icon(Icons.Default.CurrencyExchange, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(if (exchangeRateState is SubscriptionExchangeRateUiState.Loading) "Alınıyor" else "Kuru Getir")
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (calculatedTryAmount > 0) "TL karşılığı: ${MoneyFormatter.format(calculatedTryAmount)}" else "TL karşılığı hesaplanamadı.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (calculatedTryAmount > 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
+                                )
+                            }
+                            when (val state = exchangeRateState) {
+                                is SubscriptionExchangeRateUiState.Error -> Text(
+                                    text = state.message,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                is SubscriptionExchangeRateUiState.Success -> if (state.rate.baseCurrency == selectedCurrency) {
+                                    Text(
+                                        text = "Kaynak: ${state.rate.source}${state.rate.date.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                else -> Unit
+                            }
+                        }
+                    }
                 }
                 item {
                     OutlinedTextField(
@@ -377,7 +541,19 @@ fun SubscriptionDialog(
                 enabled = isFormValid,
                 onClick = {
                     if (existingSub == null) {
-                        onConfirmAdd(title, amount!!, bDay, selectedCategory!!.id, selectedAccount!!.id, month!!)
+                        onConfirmAdd(
+                            title,
+                            amount!!,
+                            bDay,
+                            selectedCategory!!.id,
+                            selectedAccount!!.id,
+                            month!!,
+                            selectedCurrency,
+                            exchangeRateToTry.takeIf { selectedCurrency != "TRY" },
+                            RATE_SCALE.takeIf { selectedCurrency != "TRY" },
+                            exchangeRateSource.takeIf { selectedCurrency != "TRY" },
+                            exchangeRateUpdatedAt.takeIf { selectedCurrency != "TRY" }
+                        )
                     } else {
                         onConfirmUpdate(
                             existingSub.copy(
@@ -386,7 +562,12 @@ fun SubscriptionDialog(
                                 categoryId = selectedCategory!!.id,
                                 paymentAccountId = selectedAccount!!.id,
                                 note = note.ifBlank { null },
-                                isActive = isActive
+                                isActive = isActive,
+                                originalCurrency = selectedCurrency.takeIf { selectedCurrency != "TRY" },
+                                exchangeRateToTry = exchangeRateToTry.takeIf { selectedCurrency != "TRY" },
+                                exchangeRateScale = RATE_SCALE.takeIf { selectedCurrency != "TRY" },
+                                exchangeRateSource = exchangeRateSource.takeIf { selectedCurrency != "TRY" },
+                                exchangeRateUpdatedAt = exchangeRateUpdatedAt.takeIf { selectedCurrency != "TRY" }
                             ),
                             if (priceChanged) amount else null,
                             if (priceChanged) month else null

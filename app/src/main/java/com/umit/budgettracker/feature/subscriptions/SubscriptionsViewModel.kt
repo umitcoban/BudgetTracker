@@ -8,6 +8,8 @@ import com.umit.budgettracker.core.domain.repository.*
 import com.umit.budgettracker.core.domain.usecase.MarkSubscriptionPaymentAsPaidUseCase
 import com.umit.budgettracker.core.domain.usecase.MarkSubscriptionPaymentResult
 import com.umit.budgettracker.core.domain.usecase.SyncDueSubscriptionExpensesUseCase
+import com.umit.budgettracker.core.network.ExchangeRateResult
+import com.umit.budgettracker.core.network.ExchangeRateService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -24,7 +26,8 @@ class SubscriptionsViewModel @Inject constructor(
     private val expenseRepository: ExpenseRepository,
     private val calculator: SubscriptionMonthlyCalculator,
     private val markSubscriptionPaymentAsPaid: MarkSubscriptionPaymentAsPaidUseCase,
-    private val syncDueSubscriptionExpenses: SyncDueSubscriptionExpensesUseCase
+    private val syncDueSubscriptionExpenses: SyncDueSubscriptionExpensesUseCase,
+    private val exchangeRateService: ExchangeRateService
 ) : ViewModel() {
 
     private val _selectedMonth = MutableStateFlow(YearMonth.now())
@@ -46,10 +49,25 @@ class SubscriptionsViewModel @Inject constructor(
     private val _message = MutableSharedFlow<String>()
     val message: SharedFlow<String> = _message.asSharedFlow()
 
+    private val _exchangeRateState = MutableStateFlow<SubscriptionExchangeRateUiState>(SubscriptionExchangeRateUiState.Idle)
+    val exchangeRateState: StateFlow<SubscriptionExchangeRateUiState> = _exchangeRateState.asStateFlow()
+
     fun nextMonth() { _selectedMonth.value = _selectedMonth.value.plusMonths(1) }
     fun previousMonth() { _selectedMonth.value = _selectedMonth.value.minusMonths(1) }
 
-    fun addSubscription(title: String, amount: Long, billingDay: Int, categoryId: Long, accountId: Long, month: YearMonth) {
+    fun addSubscription(
+        title: String,
+        amount: Long,
+        billingDay: Int,
+        categoryId: Long,
+        accountId: Long,
+        month: YearMonth,
+        currency: String,
+        exchangeRateToTry: Long?,
+        exchangeRateScale: Int?,
+        exchangeRateSource: String?,
+        exchangeRateUpdatedAt: Long?
+    ) {
         viewModelScope.launch {
             val sub = Subscription(
                 id = 0,
@@ -58,7 +76,12 @@ class SubscriptionsViewModel @Inject constructor(
                 paymentAccountId = accountId,
                 billingDay = billingDay,
                 isActive = true,
-                note = null
+                note = null,
+                originalCurrency = currency.takeIf { it != "TRY" },
+                exchangeRateToTry = exchangeRateToTry.takeIf { currency != "TRY" },
+                exchangeRateScale = exchangeRateScale.takeIf { currency != "TRY" },
+                exchangeRateSource = exchangeRateSource.takeIf { currency != "TRY" },
+                exchangeRateUpdatedAt = exchangeRateUpdatedAt.takeIf { currency != "TRY" }
             )
             repository.createSubscriptionWithPrice(sub, amount, month)
             val syncResult = runCatching { syncDueSubscriptionExpenses() }.getOrNull()
@@ -125,4 +148,33 @@ class SubscriptionsViewModel @Inject constructor(
             }
         }
     }
+
+    fun fetchExchangeRate(currency: String) {
+        if (currency == "TRY") {
+            _exchangeRateState.value = SubscriptionExchangeRateUiState.Idle
+            return
+        }
+
+        viewModelScope.launch {
+            _exchangeRateState.value = SubscriptionExchangeRateUiState.Loading
+            exchangeRateService.fetchRateToTry(currency)
+                .onSuccess { _exchangeRateState.value = SubscriptionExchangeRateUiState.Success(it) }
+                .onFailure {
+                    _exchangeRateState.value = SubscriptionExchangeRateUiState.Error(
+                        "Kur bilgisi alınamadı. Manuel kur girebilirsiniz."
+                    )
+                }
+        }
+    }
+
+    fun clearExchangeRateState() {
+        _exchangeRateState.value = SubscriptionExchangeRateUiState.Idle
+    }
+}
+
+sealed interface SubscriptionExchangeRateUiState {
+    data object Idle : SubscriptionExchangeRateUiState
+    data object Loading : SubscriptionExchangeRateUiState
+    data class Success(val rate: ExchangeRateResult) : SubscriptionExchangeRateUiState
+    data class Error(val message: String) : SubscriptionExchangeRateUiState
 }

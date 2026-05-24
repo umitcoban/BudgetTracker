@@ -34,6 +34,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -48,6 +50,7 @@ fun ExpenseScreen(
 ) {
     val expenses by viewModel.expenses.collectAsState()
     val selectedMonth by viewModel.selectedMonth.collectAsState()
+    val exchangeRateState by viewModel.exchangeRateState.collectAsState()
     
     var showDialog by remember { mutableStateOf(false) }
     var editingExpense by remember { mutableStateOf<Expense?>(null) }
@@ -119,11 +122,19 @@ fun ExpenseScreen(
                 },
                 categories = viewModel.categories.collectAsState().value,
                 accounts = viewModel.accounts.collectAsState().value,
+                exchangeRateState = exchangeRateState,
+                onFetchExchangeRate = { viewModel.fetchExchangeRate(it) },
+                onClearExchangeRateState = { viewModel.clearExchangeRateState() },
                 onAddAttachment = { uri -> 
                     editingExpense?.let { viewModel.addAttachment(it.id, uri) }
                 },
                 attachmentsFlow = editingExpense?.let { viewModel.getAttachments(it.id) } ?: flowOf(emptyList<ExpenseAttachment>()),
-                onDeleteAttachment = { viewModel.deleteAttachment(it) }
+                onDeleteAttachment = { viewModel.deleteAttachment(it) },
+                adjustmentsFlow = editingExpense?.let { viewModel.getAdjustments(it.id) } ?: flowOf(emptyList<ExpenseAdjustment>()),
+                onAddRefund = { amount, note ->
+                    editingExpense?.let { viewModel.addRefund(it.id, amount, note) }
+                },
+                onDeleteAdjustment = { viewModel.deleteAdjustment(it) }
             )
         }
     }
@@ -160,6 +171,13 @@ fun ExpenseRow(
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(text = expense.expenseDate.toString(), style = MaterialTheme.typography.bodySmall)
+                if (expense.originalCurrency != null && expense.originalAmount != null) {
+                    Text(
+                        text = "${expense.originalAmount.formatMinor()} ${expense.originalCurrency} • ${MoneyFormatter.format(expense.amount)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
                 if (expense.installmentGroupId != null) {
                     Text(text = "Taksitli Harcama", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                 }
@@ -211,12 +229,32 @@ fun ExpenseDialog(
     onConfirmInstallment: (InstallmentGroup, List<Expense>) -> Unit,
     categories: List<Category>,
     accounts: List<PaymentAccount>,
+    exchangeRateState: ExchangeRateUiState,
+    onFetchExchangeRate: (String) -> Unit,
+    onClearExchangeRateState: () -> Unit,
     onAddAttachment: (android.net.Uri) -> Unit,
     attachmentsFlow: kotlinx.coroutines.flow.Flow<List<ExpenseAttachment>>,
-    onDeleteAttachment: (ExpenseAttachment) -> Unit
+    onDeleteAttachment: (ExpenseAttachment) -> Unit,
+    adjustmentsFlow: kotlinx.coroutines.flow.Flow<List<ExpenseAdjustment>>,
+    onAddRefund: (Long, String?) -> Unit,
+    onDeleteAdjustment: (ExpenseAdjustment) -> Unit
 ) {
+    val initialCurrency = existingExpense?.originalCurrency ?: "TRY"
     var title by remember { mutableStateOf(existingExpense?.title ?: "") }
-    var amountText by remember { mutableStateOf(existingExpense?.let { (it.amount / 100).toString() } ?: "") }
+    var selectedCurrency by remember { mutableStateOf(initialCurrency) }
+    var amountText by remember {
+        mutableStateOf(
+            existingExpense?.let {
+                val displayAmount = if (initialCurrency == "TRY") it.amount else it.originalAmount ?: it.amount
+                displayAmount.formatMinor()
+            } ?: ""
+        )
+    }
+    var exchangeRateText by remember {
+        mutableStateOf(existingExpense?.exchangeRateToTry?.formatRate(existingExpense.exchangeRateScale) ?: "")
+    }
+    var exchangeRateSource by remember { mutableStateOf(existingExpense?.exchangeRateSource) }
+    var exchangeRateUpdatedAt by remember { mutableStateOf(existingExpense?.exchangeRateUpdatedAt) }
     var selectedCategory by remember { mutableStateOf(existingExpense?.category ?: categories.firstOrNull()) }
     var selectedAccount by remember { mutableStateOf(existingExpense?.account ?: accounts.firstOrNull()) }
     var selectedDate by remember(existingExpense?.id, selectedMonth) {
@@ -228,14 +266,40 @@ fun ExpenseDialog(
 
     var categoryExpanded by remember { mutableStateOf(false) }
     var accountExpanded by remember { mutableStateOf(false) }
+    var currencyExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var previewAttachment by remember { mutableStateOf<ExpenseAttachment?>(null) }
+    var showRefundDialog by remember { mutableStateOf(false) }
 
     val attachments by attachmentsFlow.collectAsState(emptyList())
+    val adjustments by adjustmentsFlow.collectAsState(emptyList())
     val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { onAddAttachment(it) }
     }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
+    val supportedCurrencies = remember { listOf("TRY", "USD", "EUR", "GBP") }
+
+    LaunchedEffect(exchangeRateState, selectedCurrency) {
+        when (val state = exchangeRateState) {
+            is ExchangeRateUiState.Success -> {
+                if (state.rate.baseCurrency == selectedCurrency) {
+                    exchangeRateText = state.rate.rateToTry.formatRate(state.rate.rateScale)
+                    exchangeRateSource = state.rate.source
+                    exchangeRateUpdatedAt = System.currentTimeMillis()
+                }
+            }
+            else -> Unit
+        }
+    }
+
+    LaunchedEffect(selectedCurrency) {
+        if (selectedCurrency == "TRY") {
+            exchangeRateText = ""
+            exchangeRateSource = null
+            exchangeRateUpdatedAt = null
+            onClearExchangeRateState()
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -254,7 +318,91 @@ fun ExpenseDialog(
                     }
                 }
                 item { OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Başlık") }, modifier = Modifier.fillMaxWidth()) }
-                item { OutlinedTextField(value = amountText, onValueChange = { amountText = it }, label = { Text(if (isInstallment) "Toplam Tutar (TL)" else "Tutar (TL)") }, modifier = Modifier.fillMaxWidth()) }
+                item {
+                    ExposedDropdownMenuBox(
+                        expanded = currencyExpanded,
+                        onExpandedChange = { currencyExpanded = !currencyExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedCurrency,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Para Birimi") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = currencyExpanded,
+                            onDismissRequest = { currencyExpanded = false }
+                        ) {
+                            supportedCurrencies.forEach { currency ->
+                                DropdownMenuItem(
+                                    text = { Text(currency) },
+                                    onClick = {
+                                        selectedCurrency = currency
+                                        currencyExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                item {
+                    OutlinedTextField(
+                        value = amountText,
+                        onValueChange = { amountText = it },
+                        label = { Text(if (isInstallment) "Toplam Tutar ($selectedCurrency)" else "Tutar ($selectedCurrency)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (selectedCurrency != "TRY") {
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedTextField(
+                                value = exchangeRateText,
+                                onValueChange = {
+                                    exchangeRateText = it
+                                    exchangeRateSource = "MANUAL"
+                                    exchangeRateUpdatedAt = System.currentTimeMillis()
+                                },
+                                label = { Text("1 $selectedCurrency kaç TL?") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedButton(
+                                    enabled = exchangeRateState !is ExchangeRateUiState.Loading,
+                                    onClick = { onFetchExchangeRate(selectedCurrency) }
+                                ) {
+                                    Icon(Icons.Default.CurrencyExchange, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(if (exchangeRateState is ExchangeRateUiState.Loading) "Alınıyor" else "Kuru Getir")
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                val tryAmount = calculateTryAmountText(amountText, exchangeRateText)
+                                Text(
+                                    text = tryAmount ?: "TL karşılığı hesaplanamadı.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (tryAmount == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            when (val state = exchangeRateState) {
+                                is ExchangeRateUiState.Error -> Text(
+                                    text = state.message,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                is ExchangeRateUiState.Success -> if (state.rate.baseCurrency == selectedCurrency) {
+                                    Text(
+                                        text = "Kaynak: ${state.rate.source}${state.rate.date.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                else -> Unit
+                            }
+                        }
+                    }
+                }
                 item {
                     OutlinedButton(
                         onClick = { showDatePicker = true },
@@ -356,6 +504,15 @@ fun ExpenseDialog(
 
                 if (existingExpense != null) {
                     item {
+                        ExpenseAdjustmentsSection(
+                            expenseAmount = existingExpense.amount,
+                            adjustments = adjustments,
+                            onAddRefund = { showRefundDialog = true },
+                            onDeleteAdjustment = onDeleteAdjustment
+                        )
+                    }
+
+                    item {
                         Text(text = "Fiş Fotoğrafları", style = MaterialTheme.typography.titleSmall)
                         if (attachments.isEmpty()) {
                             Text(
@@ -404,9 +561,20 @@ fun ExpenseDialog(
             }
         },
         confirmButton = {
-            val amount = MoneyFormatter.parse(amountText) ?: 0L
+            val originalAmount = MoneyFormatter.parse(amountText) ?: 0L
+            val rate = parseRateToScale(exchangeRateText)
+            val amount = if (selectedCurrency == "TRY") {
+                originalAmount
+            } else {
+                calculateTryMinorAmount(originalAmount, rate)
+            }
             val iCount = installmentCountText.toIntOrNull() ?: 0
-            val isValid = title.isNotBlank() && amount > 0 && selectedCategory != null && selectedAccount != null && (!isInstallment || iCount > 1)
+            val isValid = title.isNotBlank() &&
+                amount > 0 &&
+                selectedCategory != null &&
+                selectedAccount != null &&
+                (selectedCurrency == "TRY" || rate != null) &&
+                (!isInstallment || iCount > 1)
             
             TextButton(
                 enabled = isValid,
@@ -446,7 +614,13 @@ fun ExpenseDialog(
                                 note = existingExpense?.note,
                                 installmentGroupId = existingExpense?.installmentGroupId,
                                 subscriptionId = existingExpense?.subscriptionId,
-                                loanId = existingExpense?.loanId
+                                loanId = existingExpense?.loanId,
+                                originalAmount = originalAmount.takeIf { selectedCurrency != "TRY" },
+                                originalCurrency = selectedCurrency.takeIf { selectedCurrency != "TRY" },
+                                exchangeRateToTry = rate.takeIf { selectedCurrency != "TRY" },
+                                exchangeRateScale = RATE_SCALE.takeIf { selectedCurrency != "TRY" },
+                                exchangeRateSource = exchangeRateSource.takeIf { selectedCurrency != "TRY" },
+                                exchangeRateUpdatedAt = exchangeRateUpdatedAt.takeIf { selectedCurrency != "TRY" }
                             )
                         )
                     }
@@ -479,10 +653,159 @@ fun ExpenseDialog(
             onDismiss = { previewAttachment = null }
         )
     }
+
+    if (showRefundDialog && existingExpense != null) {
+        AddRefundDialog(
+            remainingAmount = (existingExpense.amount - adjustments.sumOf { it.amount }).coerceAtLeast(0L),
+            onDismiss = { showRefundDialog = false },
+            onConfirm = { amount, note ->
+                onAddRefund(amount, note)
+                showRefundDialog = false
+            }
+        )
+    }
 }
 
 @Composable
 fun Color.warningContainer(): Color = Color(0xFFFFF9C4) // Simple yellow for warnings
+
+@Composable
+private fun ExpenseAdjustmentsSection(
+    expenseAmount: Long,
+    adjustments: List<ExpenseAdjustment>,
+    onAddRefund: () -> Unit,
+    onDeleteAdjustment: (ExpenseAdjustment) -> Unit
+) {
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
+    var adjustmentToDelete by remember { mutableStateOf<ExpenseAdjustment?>(null) }
+    val refundTotal = adjustments.sumOf { it.amount }
+    val netAmount = (expenseAmount - refundTotal).coerceAtLeast(0L)
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(text = "İadeler", style = MaterialTheme.typography.titleSmall)
+        Text(
+            text = "Net tutar: ${MoneyFormatter.format(netAmount)}",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold
+        )
+
+        if (adjustments.isEmpty()) {
+            Text(
+                text = "Henüz iade eklenmedi.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            adjustments.forEach { adjustment ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = MoneyFormatter.format(adjustment.amount),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = buildString {
+                                append(adjustment.adjustmentDate.format(dateFormatter))
+                                adjustment.note?.takeIf { it.isNotBlank() }?.let { append(" • $it") }
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { adjustmentToDelete = adjustment }) {
+                        Icon(Icons.Default.Delete, contentDescription = "Sil")
+                    }
+                }
+            }
+        }
+
+        OutlinedButton(
+            enabled = netAmount > 0,
+            onClick = onAddRefund,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.Replay, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("İade Ekle")
+        }
+    }
+
+    adjustmentToDelete?.let { adjustment ->
+        AlertDialog(
+            onDismissRequest = { adjustmentToDelete = null },
+            title = { Text("İadeyi Sil") },
+            text = { Text("Bu iade kaydını silmek istediğinizden emin misiniz?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteAdjustment(adjustment)
+                        adjustmentToDelete = null
+                    }
+                ) {
+                    Text("Sil", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { adjustmentToDelete = null }) {
+                    Text("Vazgeç")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun AddRefundDialog(
+    remainingAmount: Long,
+    onDismiss: () -> Unit,
+    onConfirm: (Long, String?) -> Unit
+) {
+    var amountText by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    val amount = MoneyFormatter.parse(amountText) ?: 0L
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("İade Ekle") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Kalan iade edilebilir tutar: ${MoneyFormatter.format(remainingAmount)}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it },
+                    label = { Text("İade Tutarı (TL)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("Not") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = amount > 0 && amount <= remainingAmount,
+                onClick = { onConfirm(amount, note.takeIf { it.isNotBlank() }) }
+            ) {
+                Text("Kaydet")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Vazgeç")
+            }
+        }
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -607,4 +930,45 @@ private fun LocalDate.toUtcMillis(): Long {
 
 private fun Long.toLocalDateUtc(): LocalDate {
     return Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
+}
+
+private const val RATE_SCALE = 10_000
+
+private fun parseRateToScale(text: String): Long? {
+    return text
+        .replace(',', '.')
+        .toBigDecimalOrNull()
+        ?.takeIf { it > BigDecimal.ZERO }
+        ?.multiply(BigDecimal(RATE_SCALE))
+        ?.setScale(0, RoundingMode.HALF_UP)
+        ?.longValueExact()
+}
+
+private fun calculateTryMinorAmount(originalAmount: Long, exchangeRateToTry: Long?): Long {
+    if (exchangeRateToTry == null) return 0L
+    return BigDecimal(originalAmount)
+        .multiply(BigDecimal(exchangeRateToTry))
+        .divide(BigDecimal(RATE_SCALE), 0, RoundingMode.HALF_UP)
+        .longValueExact()
+}
+
+private fun calculateTryAmountText(amountText: String, exchangeRateText: String): String? {
+    val originalAmount = MoneyFormatter.parse(amountText) ?: return null
+    val rate = parseRateToScale(exchangeRateText) ?: return null
+    return "TL karşılığı: ${MoneyFormatter.format(calculateTryMinorAmount(originalAmount, rate))}"
+}
+
+private fun Long.formatRate(scale: Int?): String {
+    val actualScale = scale ?: RATE_SCALE
+    return BigDecimal(this)
+        .divide(BigDecimal(actualScale), 4, RoundingMode.HALF_UP)
+        .stripTrailingZeros()
+        .toPlainString()
+}
+
+private fun Long.formatMinor(): String {
+    return BigDecimal(this)
+        .divide(BigDecimal(100), 2, RoundingMode.HALF_UP)
+        .stripTrailingZeros()
+        .toPlainString()
 }

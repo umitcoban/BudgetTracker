@@ -35,7 +35,7 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME
-        ).addMigrations(MIGRATION_2_3)
+        ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .fallbackToDestructiveMigration()
             .fallbackToDestructiveMigrationOnDowngrade()
             .addCallback(object : RoomDatabase.Callback() {
@@ -54,6 +54,70 @@ object DatabaseModule {
             addNullableColumnIfMissing(db, "subscriptions", "cancelledFromMonth", "TEXT")
             addNullableColumnIfMissing(db, "expenses", "subscriptionId", "INTEGER")
             addNullableColumnIfMissing(db, "expenses", "loanId", "INTEGER")
+        }
+    }
+
+    private val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `expense_adjustments` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `expenseId` INTEGER NOT NULL,
+                    `amount` INTEGER NOT NULL,
+                    `type` TEXT NOT NULL,
+                    `adjustmentDate` INTEGER NOT NULL,
+                    `note` TEXT
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_expense_adjustments_expenseId` ON `expense_adjustments` (`expenseId`)"
+            )
+        }
+    }
+
+    private val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            addNullableColumnIfMissing(db, "expenses", "originalAmount", "INTEGER")
+            addNullableColumnIfMissing(db, "expenses", "originalCurrency", "TEXT")
+            addNullableColumnIfMissing(db, "expenses", "exchangeRateToTry", "INTEGER")
+            addNullableColumnIfMissing(db, "expenses", "exchangeRateScale", "INTEGER")
+            addNullableColumnIfMissing(db, "expenses", "exchangeRateSource", "TEXT")
+            addNullableColumnIfMissing(db, "expenses", "exchangeRateUpdatedAt", "INTEGER")
+        }
+    }
+
+    private val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            addNullableColumnIfMissing(db, "subscriptions", "originalCurrency", "TEXT")
+            addNullableColumnIfMissing(db, "subscriptions", "exchangeRateToTry", "INTEGER")
+            addNullableColumnIfMissing(db, "subscriptions", "exchangeRateScale", "INTEGER")
+            addNullableColumnIfMissing(db, "subscriptions", "exchangeRateSource", "TEXT")
+            addNullableColumnIfMissing(db, "subscriptions", "exchangeRateUpdatedAt", "INTEGER")
+        }
+    }
+
+    private val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `credit_card_statement_payments` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `accountId` INTEGER NOT NULL,
+                    `paymentMonth` TEXT NOT NULL,
+                    `amountAtPayment` INTEGER NOT NULL,
+                    `isPaid` INTEGER NOT NULL,
+                    `paidAt` INTEGER
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS `index_credit_card_statement_payments_accountId_paymentMonth`
+                ON `credit_card_statement_payments` (`accountId`, `paymentMonth`)
+                """.trimIndent()
+            )
         }
     }
 
@@ -143,4 +207,11 @@ object DatabaseModule {
 
     @Provides
     fun provideExpenseAttachmentDao(db: AppDatabase): ExpenseAttachmentDao = db.expenseAttachmentDao()
+
+    @Provides
+    fun provideCreditCardStatementPaymentDao(db: AppDatabase): CreditCardStatementPaymentDao =
+        db.creditCardStatementPaymentDao()
+
+    @Provides
+    fun provideExpenseAdjustmentDao(db: AppDatabase): ExpenseAdjustmentDao = db.expenseAdjustmentDao()
 }

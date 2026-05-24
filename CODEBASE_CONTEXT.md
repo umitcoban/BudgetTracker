@@ -19,6 +19,7 @@ This document is the persistent project context for future Codex sessions. Read 
 - Analytics: none
 - Ads: none
 - Network dependency for core features: none
+- Optional network use: user-triggered exchange-rate lookup for foreign-currency expenses
 
 BudgetTracker is a local-only personal finance and monthly budgeting app. It is intended to be deterministic, privacy-friendly, and safe for long-term local financial data.
 
@@ -36,8 +37,8 @@ BudgetTracker is a local-only personal finance and monthly budgeting app. It is 
 - Hilt: 2.51.1
 - Compose BOM: 2024.05.00
 - Database name: `budget_tracker_db`
-- Room database version: 3
-- JSON export schema version: 2
+- Room database version: 7
+- JSON export schema version: 6
 
 ## Non-Negotiable Product Rules
 
@@ -55,6 +56,8 @@ Do not add:
 - Server-side authentication
 
 All user finance data must remain on the device.
+
+Exception: exchange-rate lookup is allowed as a user-triggered helper for foreign-currency expense entry. It must not create accounts, sync user data, upload financial records, or become required for core usage. If rate lookup fails, the user must be able to enter the exchange rate manually.
 
 ### Money Storage
 
@@ -184,6 +187,8 @@ The Room database currently includes these entities:
 - `DebtRecordEntity`
 - `NetWorthSnapshotEntity`
 - `ExpenseAttachmentEntity`
+- `CreditCardStatementPaymentEntity`
+- `ExpenseAdjustmentEntity`
 
 Default seeded categories:
 
@@ -235,9 +240,90 @@ JSON export/import:
 
 - `appName` must be `BudgetTracker`.
 - Unsupported future schema versions must be rejected.
-- Current JSON schema version is 2.
+- Current JSON schema version is 4.
 - Attachment metadata is included in schema version 2.
+- Credit card statement payment status is included in schema version 3.
+- Expense adjustments/refunds are included in schema version 4.
+- Foreign-currency expense metadata is included in schema version 5.
+- Foreign-currency subscription metadata is included in schema version 6.
 - Replace-mode imports must be confirmed by the user.
+
+## Foreign Currency Expense Rule
+
+Primary reporting currency remains TRY.
+
+The existing `Expense.amount` field must continue to store the TRY minor-unit value used by reports, budgets, dashboards, exports, and card statements.
+
+Foreign-currency expenses may additionally store nullable metadata:
+
+```text
+originalAmount
+originalCurrency
+exchangeRateToTry
+exchangeRateScale
+exchangeRateSource
+exchangeRateUpdatedAt
+```
+
+Rules:
+
+- Existing expenses must remain valid without these fields.
+- `amount` is always the TRY equivalent in minor units.
+- `originalAmount` is stored in the selected currency minor units.
+- `exchangeRateToTry` uses fixed-scale integer precision, currently scale `10000`.
+- Manual rate entry must be available if network lookup fails.
+- Do not use `Double` for persisted money or exchange-rate calculation.
+- Optional network source currently uses Frankfurter public API for user-triggered rate lookup.
+
+## Foreign Currency Subscription Rule
+
+Primary reporting currency remains TRY.
+
+Subscriptions may store nullable currency metadata:
+
+```text
+originalCurrency
+exchangeRateToTry
+exchangeRateScale
+exchangeRateSource
+exchangeRateUpdatedAt
+```
+
+For TRY subscriptions, `SubscriptionPriceHistory.amount` is interpreted as TRY minor units.
+
+For foreign-currency subscriptions, `SubscriptionPriceHistory.amount` is interpreted as the original currency minor-unit amount. Monthly subscription calculations should convert it to TRY using the latest available exchange rate. If live rate lookup fails, fall back to the stored/manual rate on the subscription. Existing TRY subscriptions must remain valid without any currency metadata.
+
+When a foreign-currency subscription payment is processed into expenses, the created expense should keep:
+
+```text
+amount = calculated TRY minor-unit amount
+originalAmount = subscription original currency amount
+originalCurrency = subscription currency
+exchangeRateToTry / exchangeRateScale / exchangeRateSource / exchangeRateUpdatedAt
+```
+
+## Expense Adjustment / Refund Rule
+
+Refunds and partial refunds must not overwrite the original expense row.
+
+Use separate adjustment records linked to the original expense:
+
+```text
+expense_adjustments
+  expenseId
+  amount
+  type = REFUND
+  adjustmentDate
+  note
+```
+
+Financial summaries should use net expense amount:
+
+```text
+netExpense = expense.amount - linked refund adjustments
+```
+
+Net amount must not go below zero.
 
 Full ZIP import:
 
