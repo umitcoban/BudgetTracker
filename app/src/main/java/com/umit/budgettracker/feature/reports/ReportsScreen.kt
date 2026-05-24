@@ -76,14 +76,21 @@ fun ReportSummaryCard(summary: com.umit.budgettracker.core.domain.model.MonthlyB
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             ReportRow("Maaş", MoneyFormatter.format(summary.salaryAmount))
+            ReportRow("Ek Gelirler", MoneyFormatter.format(summary.additionalIncomeAmount))
+            ReportRow("Toplam Gelir", MoneyFormatter.format(summary.totalIncomeAmount), fontWeight = FontWeight.Bold)
             ReportRow("Tasarruf Hedefi", MoneyFormatter.format(summary.savingGoalAmount))
             ReportRow("Toplam Harcama", MoneyFormatter.format(summary.totalExpenseAmount), Color.Red)
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             ReportRow("Abonelikler Toplamı", MoneyFormatter.format(summary.subscriptionPlannedAmount))
             ReportRow("Harcamalara İşlenen Abonelikler", MoneyFormatter.format(summary.subscriptionPaidAmount))
             ReportRow("Planlanan / Henüz İşlenmeyen Abonelikler", MoneyFormatter.format(summary.subscriptionUnpaidPlannedAmount))
+            ReportRow("Kredi Ödemeleri", MoneyFormatter.format(summary.loanPaymentAmount))
+            ReportRow("Sabit Giderler", MoneyFormatter.format(summary.fixedExpenseAmount))
+            ReportRow("Toplam Planlı Sabit Ödeme", MoneyFormatter.format(summary.projectedFixedPaymentsAmount), fontWeight = FontWeight.Bold)
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            ReportRow("Birikim Önerisi", MoneyFormatter.format(summary.suggestedSavingAmount), fontWeight = FontWeight.Bold)
             ReportRow("Kalan", MoneyFormatter.format(summary.remainingAfterSaving), fontWeight = FontWeight.Bold)
+            ReportRow("Sabit Ödemeler Sonrası Kalan", MoneyFormatter.format(summary.remainingAfterFixedPayments), fontWeight = FontWeight.Bold)
         }
     }
 }

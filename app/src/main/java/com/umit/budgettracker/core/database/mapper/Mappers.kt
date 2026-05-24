@@ -107,6 +107,34 @@ fun Income.toEntity() = IncomeEntity(
     note = note
 )
 
+fun FixedExpenseEntity.toDomain(category: Category? = null, account: PaymentAccount? = null) = FixedExpense(
+    id = id,
+    title = title,
+    amount = amount,
+    dayOfMonth = dayOfMonth,
+    startMonth = YearMonth.parse(startMonth),
+    endMonth = endMonth?.let { YearMonth.parse(it) },
+    categoryId = categoryId,
+    paymentAccountId = paymentAccountId,
+    note = note,
+    isActive = isActive,
+    category = category,
+    account = account
+)
+
+fun FixedExpense.toEntity() = FixedExpenseEntity(
+    id = id,
+    title = title,
+    amount = amount,
+    dayOfMonth = dayOfMonth,
+    startMonth = startMonth.toString(),
+    endMonth = endMonth?.toString(),
+    categoryId = categoryId,
+    paymentAccountId = paymentAccountId,
+    note = note,
+    isActive = isActive
+)
+
 fun ExpenseEntity.toDomain(category: Category? = null, account: PaymentAccount? = null) = Expense(
     id = id,
     title = title,

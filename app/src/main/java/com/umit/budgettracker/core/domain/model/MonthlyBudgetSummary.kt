@@ -16,13 +16,15 @@ data class MonthlyBudgetSummary(
     val subscriptionPaidAmount: Long = 0,
     val subscriptionUnpaidPlannedAmount: Long = 0,
     val loanPaymentAmount: Long = 0,
+    val fixedExpenseAmount: Long = 0,
+    val suggestedSavingAmount: Long = 0,
     val categorySummaries: List<CategorySummary> = emptyList(),
     val warnings: List<BudgetWarning> = emptyList()
 ) {
     val totalIncomeAmount: Long get() = salaryAmount + additionalIncomeAmount
     val remainingBeforeSaving: Long get() = totalIncomeAmount - totalExpenseAmount
     val remainingAfterSaving: Long get() = totalIncomeAmount - totalExpenseAmount - savingGoalAmount
-    val projectedFixedPaymentsAmount: Long get() = subscriptionAmount + loanPaymentAmount
+    val projectedFixedPaymentsAmount: Long get() = subscriptionAmount + loanPaymentAmount + fixedExpenseAmount
     val remainingAfterFixedPayments: Long get() = totalIncomeAmount - totalExpenseAmount - projectedFixedPaymentsAmount
     val remainingAfterSavingAndFixedPayments: Long get() = totalIncomeAmount - totalExpenseAmount - projectedFixedPaymentsAmount - savingGoalAmount
 }

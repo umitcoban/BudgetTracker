@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import com.umit.budgettracker.feature.cards.CardsScreen
 import com.umit.budgettracker.feature.dashboard.DashboardScreen
 import com.umit.budgettracker.feature.expense.ExpenseScreen
+import com.umit.budgettracker.feature.fixedexpenses.FixedExpensesScreen
 import com.umit.budgettracker.feature.reports.ReportsScreen
 import com.umit.budgettracker.feature.salary.SalaryScreen
 import com.umit.budgettracker.feature.settings.SettingsScreen
@@ -52,6 +53,9 @@ fun NavGraph(
         }
         composable(Screen.Income.route) {
             IncomeScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.FixedExpenses.route) {
+            FixedExpensesScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.Installments.route) {
             InstallmentsScreen(onBack = { navController.popBackStack() })

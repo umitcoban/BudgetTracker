@@ -3,12 +3,20 @@ package com.umit.budgettracker.feature.cashflow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.umit.budgettracker.core.domain.calculator.CreditCardStatementCalculator
+import com.umit.budgettracker.core.domain.calculator.FixedExpenseMonthlyCalculator
 import com.umit.budgettracker.core.domain.calculator.LoanMonthlyCalculator
 import com.umit.budgettracker.core.domain.calculator.SubscriptionMonthlyCalculator
 import com.umit.budgettracker.core.domain.model.CashFlowEvent
 import com.umit.budgettracker.core.domain.model.CashFlowEventType
 import com.umit.budgettracker.core.domain.model.AccountType
+import com.umit.budgettracker.core.domain.model.Expense
+import com.umit.budgettracker.core.domain.model.FixedExpenseMonthlyPayment
+import com.umit.budgettracker.core.domain.model.Income
+import com.umit.budgettracker.core.domain.model.LoanMonthlyPayment
+import com.umit.budgettracker.core.domain.model.PaymentAccount
+import com.umit.budgettracker.core.domain.model.SubscriptionMonthlyPayment
 import com.umit.budgettracker.core.domain.repository.ExpenseRepository
+import com.umit.budgettracker.core.domain.repository.IncomeRepository
 import com.umit.budgettracker.core.domain.repository.PaymentAccountRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -20,10 +28,12 @@ import javax.inject.Inject
 @HiltViewModel
 class CashFlowViewModel @Inject constructor(
     private val expenseRepository: ExpenseRepository,
+    private val incomeRepository: IncomeRepository,
     private val accountRepository: PaymentAccountRepository,
     private val statementCalculator: CreditCardStatementCalculator,
     private val subscriptionCalculator: SubscriptionMonthlyCalculator,
-    private val loanCalculator: LoanMonthlyCalculator
+    private val loanCalculator: LoanMonthlyCalculator,
+    private val fixedExpenseCalculator: FixedExpenseMonthlyCalculator
 ) : ViewModel() {
 
     private val _selectedMonth = MutableStateFlow(YearMonth.now())
@@ -31,16 +41,42 @@ class CashFlowViewModel @Inject constructor(
 
     val events: StateFlow<List<CashFlowEvent>> = _selectedMonth
         .flatMapLatest { month ->
-            combine(
+            val actualFlow = combine(
+                incomeRepository.observeIncomesForMonth(month),
                 expenseRepository.observeExpensesForMonth(month),
-                expenseRepository.observeAllExpenses(),
+                expenseRepository.observeAllExpenses()
+            ) { incomes, expenses, allExpenses ->
+                CashFlowActualInputs(incomes, expenses, allExpenses)
+            }
+            val plannedFlow = combine(
                 accountRepository.observeActiveAccounts(),
                 subscriptionCalculator.getPaymentsForMonth(month),
-                loanCalculator.getPaymentsForMonth(month)
-            ) { expenses, allExpenses, accounts, subscriptions, loans ->
+                loanCalculator.getPaymentsForMonth(month),
+                fixedExpenseCalculator.getPaymentsForMonth(month)
+            ) { accounts, subscriptions, loans, fixedExpenses ->
+                CashFlowPlannedInputs(accounts, subscriptions, loans, fixedExpenses)
+            }
+
+            combine(
+                actualFlow,
+                plannedFlow
+            ) { actual, planned ->
                 val list = mutableListOf<CashFlowEvent>()
+
+                actual.incomes.forEach { income ->
+                    list.add(
+                        CashFlowEvent(
+                            date = income.incomeDate,
+                            title = income.title,
+                            amount = income.amount,
+                            type = CashFlowEventType.INCOME,
+                            sourceId = income.id,
+                            description = "Gelir"
+                        )
+                    )
+                }
                 
-                expenses.forEach { e ->
+                actual.expenses.forEach { e ->
                     list.add(
                         CashFlowEvent(
                             date = e.expenseDate,
@@ -53,8 +89,8 @@ class CashFlowViewModel @Inject constructor(
                     )
                 }
 
-                accounts.filter { it.type == AccountType.CREDIT_CARD }.forEach { acc ->
-                    val statement = statementCalculator.calculateStatement(acc, month, allExpenses)
+                planned.accounts.filter { it.type == AccountType.CREDIT_CARD }.forEach { acc ->
+                    val statement = statementCalculator.calculateStatement(acc, month, actual.allExpenses)
                     if (statement.totalAmount > 0) {
                         list.add(
                             CashFlowEvent(
@@ -69,7 +105,7 @@ class CashFlowViewModel @Inject constructor(
                     }
                 }
 
-                subscriptions.filter { !it.isPaid }.forEach { sub ->
+                planned.subscriptions.filter { !it.isPaid }.forEach { sub ->
                     list.add(
                         CashFlowEvent(
                             date = month.atDay(sub.billingDay.coerceAtMost(month.lengthOfMonth())),
@@ -82,7 +118,7 @@ class CashFlowViewModel @Inject constructor(
                     )
                 }
 
-                loans.forEach { loan ->
+                planned.loans.forEach { loan ->
                     list.add(
                         CashFlowEvent(
                             date = month.atDay(loan.paymentDay.coerceAtMost(month.lengthOfMonth())),
@@ -95,6 +131,19 @@ class CashFlowViewModel @Inject constructor(
                     )
                 }
 
+                planned.fixedExpenses.forEach { fixedExpense ->
+                    list.add(
+                        CashFlowEvent(
+                            date = month.atDay(fixedExpense.dayOfMonth.coerceAtMost(month.lengthOfMonth())),
+                            title = fixedExpense.title,
+                            amount = fixedExpense.amount,
+                            type = CashFlowEventType.FIXED_EXPENSE,
+                            sourceId = fixedExpense.fixedExpenseId,
+                            description = "Sabit gider"
+                        )
+                    )
+                }
+
                 list.sortedBy { it.date }
             }
         }
@@ -103,3 +152,16 @@ class CashFlowViewModel @Inject constructor(
     fun nextMonth() { _selectedMonth.value = _selectedMonth.value.plusMonths(1) }
     fun previousMonth() { _selectedMonth.value = _selectedMonth.value.minusMonths(1) }
 }
+
+private data class CashFlowActualInputs(
+    val incomes: List<Income>,
+    val expenses: List<Expense>,
+    val allExpenses: List<Expense>
+)
+
+private data class CashFlowPlannedInputs(
+    val accounts: List<PaymentAccount>,
+    val subscriptions: List<SubscriptionMonthlyPayment>,
+    val loans: List<LoanMonthlyPayment>,
+    val fixedExpenses: List<FixedExpenseMonthlyPayment>
+)

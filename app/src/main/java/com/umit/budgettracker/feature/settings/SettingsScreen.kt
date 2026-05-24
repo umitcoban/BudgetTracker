@@ -98,6 +98,13 @@ fun SettingsScreen(
             }
             item {
                 SettingsItem(
+                    title = "Sabit Giderler",
+                    icon = Icons.Default.EventRepeat,
+                    onClick = { onNavigate(Screen.FixedExpenses.route) }
+                )
+            }
+            item {
+                SettingsItem(
                     title = "Krediler",
                     icon = Icons.Default.AccountBalance,
                     onClick = { onNavigate(Screen.Loans.route) }

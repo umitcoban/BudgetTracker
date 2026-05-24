@@ -2,7 +2,7 @@
 
 BudgetTracker is a privacy-first, local-only Android personal finance app built with Kotlin, Jetpack Compose, Material 3, Room, Hilt, and DataStore.
 
-The app helps track monthly budgeting, salary rules, saving goals, expenses, categories, credit cards, installments, subscriptions, loans, debts, net worth, reports, and backup/export workflows. All financial data is stored on the device; the project does not use a backend, cloud sync, analytics, ads, or remote tracking.
+The app helps track monthly budgeting, salary rules, additional income, saving goals, fixed expenses, expenses, categories, credit cards, installments, subscriptions, loans, debts, net worth, reports, and backup/export workflows. All financial data is stored on the device; the project does not use a backend, cloud sync, analytics, ads, or remote tracking.
 
 ## GitHub Description
 
@@ -10,7 +10,8 @@ Privacy-first, local-only Android budgeting app built with Kotlin, Jetpack Compo
 
 ## Features
 
-- Monthly dashboard with salary, spending, saving goals, and projections
+- Monthly dashboard with salary, additional income, spending, saving goals, savings suggestion, and projections
+- Fixed recurring expense tracking for rent, dues, insurance, and similar predictable payments
 - Expense tracking with categories and payment accounts
 - Credit card statement and due-date tracking
 - Installment purchase support
@@ -63,6 +64,7 @@ app/src/main/java/com/umit/budgettracker
   feature/
     dashboard/
     expense/
+    fixedexpenses/
     cards/
     reports/
     settings/

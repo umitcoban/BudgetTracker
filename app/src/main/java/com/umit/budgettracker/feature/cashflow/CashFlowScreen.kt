@@ -58,19 +58,22 @@ fun CashFlowScreen(
 @Composable
 fun CashFlowRow(event: CashFlowEvent) {
     val typeLabel = when (event.type) {
+        CashFlowEventType.INCOME -> "Gelir"
         CashFlowEventType.EXPENSE -> "Harcama"
         CashFlowEventType.CREDIT_CARD_PAYMENT -> "Kart Ekstresi"
         CashFlowEventType.INSTALLMENT -> "Taksit"
         CashFlowEventType.SUBSCRIPTION -> "Abonelik"
         CashFlowEventType.LOAN -> "Kredi"
+        CashFlowEventType.FIXED_EXPENSE -> "Sabit Gider"
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = when (event.type) {
+                CashFlowEventType.INCOME -> MaterialTheme.colorScheme.primaryContainer
                 CashFlowEventType.CREDIT_CARD_PAYMENT -> MaterialTheme.colorScheme.errorContainer
-                CashFlowEventType.SUBSCRIPTION, CashFlowEventType.LOAN -> MaterialTheme.colorScheme.primaryContainer
+                CashFlowEventType.SUBSCRIPTION, CashFlowEventType.LOAN, CashFlowEventType.FIXED_EXPENSE -> MaterialTheme.colorScheme.secondaryContainer
                 else -> MaterialTheme.colorScheme.surfaceVariant
             }
         )
@@ -86,7 +89,8 @@ fun CashFlowRow(event: CashFlowEvent) {
             Text(
                 text = MoneyFormatter.format(event.amount),
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = if (event.type == CashFlowEventType.INCOME) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
             )
         }
     }

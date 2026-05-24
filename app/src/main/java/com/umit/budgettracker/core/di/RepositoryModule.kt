@@ -79,4 +79,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindIncomeRepository(impl: IncomeRepositoryImpl): IncomeRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindFixedExpenseRepository(impl: FixedExpenseRepositoryImpl): FixedExpenseRepository
 }

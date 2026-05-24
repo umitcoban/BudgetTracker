@@ -19,7 +19,7 @@ This document is the persistent project context for future Codex sessions. Read 
 - Analytics: none
 - Ads: none
 - Network dependency for core features: none
-- Optional network use: user-triggered exchange-rate lookup for foreign-currency expenses
+- Optional network use: user-triggered exchange-rate lookup for foreign-currency expenses and subscriptions
 
 BudgetTracker is a local-only personal finance and monthly budgeting app. It is intended to be deterministic, privacy-friendly, and safe for long-term local financial data.
 
@@ -37,8 +37,8 @@ BudgetTracker is a local-only personal finance and monthly budgeting app. It is 
 - Hilt: 2.51.1
 - Compose BOM: 2024.05.00
 - Database name: `budget_tracker_db`
-- Room database version: 8
-- JSON export schema version: 7
+- Room database version: 9
+- JSON export schema version: 8
 
 ## Non-Negotiable Product Rules
 
@@ -57,7 +57,7 @@ Do not add:
 
 All user finance data must remain on the device.
 
-Exception: exchange-rate lookup is allowed as a user-triggered helper for foreign-currency expense entry. It must not create accounts, sync user data, upload financial records, or become required for core usage. If rate lookup fails, the user must be able to enter the exchange rate manually.
+Exception: exchange-rate lookup is allowed as a user-triggered helper for foreign-currency expense and subscription entry. It must not create accounts, sync user data, upload financial records, or become required for core usage. If rate lookup fails, the user must be able to enter the exchange rate manually.
 
 ### Money Storage
 
@@ -113,6 +113,7 @@ com.umit.budgettracker
     dashboard
     debt
     expense
+    fixedexpenses
     installments
     loans
     networth
@@ -137,6 +138,7 @@ Architectural expectations:
 - Dashboard / monthly overview
 - Salary rules and monthly saving goals
 - Additional one-off income tracking
+- Fixed recurring expense planning
 - Expense tracking
 - Expense categories
 - Payment accounts and credit cards
@@ -168,7 +170,7 @@ Bottom navigation contains:
 - `Raporlar`
 - `Ayarlar`
 
-Additional routes include salary management, installments, subscriptions, loans, cash flow, category budgets, expense templates, debt tracking, net worth, and categories.
+Additional routes include salary management, additional income, fixed expenses, installments, subscriptions, loans, cash flow, category budgets, expense templates, debt tracking, net worth, and categories.
 
 ## Database Model
 
@@ -191,6 +193,7 @@ The Room database currently includes these entities:
 - `CreditCardStatementPaymentEntity`
 - `ExpenseAdjustmentEntity`
 - `IncomeEntity`
+- `FixedExpenseEntity`
 
 Default seeded categories:
 
@@ -242,13 +245,14 @@ JSON export/import:
 
 - `appName` must be `BudgetTracker`.
 - Unsupported future schema versions must be rejected.
-- Current JSON schema version is 7.
+- Current JSON schema version is 8.
 - Attachment metadata is included in schema version 2.
 - Credit card statement payment status is included in schema version 3.
 - Expense adjustments/refunds are included in schema version 4.
 - Foreign-currency expense metadata is included in schema version 5.
 - Foreign-currency subscription metadata is included in schema version 6.
 - Additional income records are included in schema version 7.
+- Fixed recurring expenses are included in schema version 8.
 - Replace-mode imports must be confirmed by the user.
 
 ## Income Records Rule
@@ -280,6 +284,52 @@ totalIncomeAmount = salaryAmount + additionalIncomeAmount
 ```
 
 Remaining balance calculations must use total income, not salary alone.
+
+## Fixed Expense and Savings Suggestion Rule
+
+Fixed expenses are recurring predictable payments that are not subscriptions and do not need subscription price history, cancellation, or mark-as-paid behavior.
+
+Examples:
+
+- Kira
+- Aidat
+- Sigorta
+- Düzenli aile desteği
+- Düzenli servis/okul ödemesi
+
+Fixed expenses are stored as planning rules:
+
+```text
+fixed_expenses
+  title
+  amount
+  dayOfMonth
+  startMonth
+  endMonth
+  categoryId
+  paymentAccountId
+  note
+  isActive
+```
+
+Rules:
+
+- A fixed expense contributes to a month when `selectedMonth >= startMonth` and `endMonth == null || selectedMonth <= endMonth`.
+- Inactive fixed expenses do not contribute to projections.
+- Fixed expenses are included in Dashboard planned fixed payments and Cash Flow.
+- Fixed expenses should not automatically create real `Expense` rows unless a separate explicit user action is added later.
+- Export/import must preserve fixed expense records without mutating existing expenses.
+
+Savings suggestion is a read-only estimate, not an automatic transaction:
+
+```text
+suggestedSavingAmount = max(
+  0,
+  (totalIncome - currentExpenses - unpaidSubscriptions - loanPayments - fixedExpenses) / 2
+)
+```
+
+This keeps the app simple and gives a conservative amount after planned monthly obligations.
 
 ## Foreign Currency Expense Rule
 
