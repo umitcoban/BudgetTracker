@@ -57,5 +57,8 @@ class MarkSubscriptionPaymentAsPaidUseCaseTest {
         override suspend fun hasAnySubscriptionExpense(subscriptionId: Long): Boolean {
             return saved.any { it.subscriptionId == subscriptionId }
         }
+        override suspend fun hasFixedExpenseForMonth(fixedExpenseId: Long, yearMonth: YearMonth): Boolean {
+            return saved.any { it.fixedExpenseId == fixedExpenseId && YearMonth.from(it.expenseDate) == yearMonth }
+        }
     }
 }

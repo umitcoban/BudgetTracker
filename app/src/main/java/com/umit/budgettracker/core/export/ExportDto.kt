@@ -69,6 +69,7 @@ data class ExpenseDto(
     val installmentGroupId: Long?,
     val subscriptionId: Long? = null,
     val loanId: Long? = null,
+    val fixedExpenseId: Long? = null,
     val originalAmount: Long? = null,
     val originalCurrency: String? = null,
     val exchangeRateToTry: Long? = null,

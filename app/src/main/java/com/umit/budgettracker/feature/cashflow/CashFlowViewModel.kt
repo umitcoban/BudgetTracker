@@ -84,7 +84,11 @@ class CashFlowViewModel @Inject constructor(
                             amount = e.amount,
                             type = if (e.installmentGroupId != null) CashFlowEventType.INSTALLMENT else CashFlowEventType.EXPENSE,
                             sourceId = e.id,
-                            description = if (e.subscriptionId != null) "Abonelik ödemesi" else null
+                            description = when {
+                                e.subscriptionId != null -> "Abonelik ödemesi"
+                                e.fixedExpenseId != null -> "Sabit gider ödemesi"
+                                else -> null
+                            }
                         )
                     )
                 }
@@ -131,7 +135,11 @@ class CashFlowViewModel @Inject constructor(
                     )
                 }
 
-                planned.fixedExpenses.forEach { fixedExpense ->
+                val paidFixedExpenseIds = actual.expenses
+                    .filter { YearMonth.from(it.expenseDate) == month }
+                    .mapNotNull { it.fixedExpenseId }
+                    .toSet()
+                planned.fixedExpenses.filter { it.fixedExpenseId !in paidFixedExpenseIds }.forEach { fixedExpense ->
                     list.add(
                         CashFlowEvent(
                             date = month.atDay(fixedExpense.dayOfMonth.coerceAtMost(month.lengthOfMonth())),

@@ -37,8 +37,8 @@ BudgetTracker is a local-only personal finance and monthly budgeting app. It is 
 - Hilt: 2.51.1
 - Compose BOM: 2024.05.00
 - Database name: `budget_tracker_db`
-- Room database version: 9
-- JSON export schema version: 8
+- Room database version: 10
+- JSON export schema version: 9
 
 ## Non-Negotiable Product Rules
 
@@ -245,7 +245,7 @@ JSON export/import:
 
 - `appName` must be `BudgetTracker`.
 - Unsupported future schema versions must be rejected.
-- Current JSON schema version is 8.
+- Current JSON schema version is 9.
 - Attachment metadata is included in schema version 2.
 - Credit card statement payment status is included in schema version 3.
 - Expense adjustments/refunds are included in schema version 4.
@@ -253,6 +253,7 @@ JSON export/import:
 - Foreign-currency subscription metadata is included in schema version 6.
 - Additional income records are included in schema version 7.
 - Fixed recurring expenses are included in schema version 8.
+- Expense links to processed fixed expenses are included in schema version 9.
 - Replace-mode imports must be confirmed by the user.
 
 ## Income Records Rule
@@ -317,7 +318,11 @@ Rules:
 - A fixed expense contributes to a month when `selectedMonth >= startMonth` and `endMonth == null || selectedMonth <= endMonth`.
 - Inactive fixed expenses do not contribute to projections.
 - Fixed expenses are included in Dashboard planned fixed payments and Cash Flow.
-- Fixed expenses should not automatically create real `Expense` rows unless a separate explicit user action is added later.
+- Fixed expenses must not silently create real `Expense` rows.
+- The user can explicitly process a fixed expense into expenses for the selected month.
+- Processed fixed expense expenses must store `fixedExpenseId`.
+- The same fixed expense must not be processed into expenses twice for the same month.
+- If a fixed expense has already been processed for the selected month, it should no longer be counted as an unpaid planned fixed expense for that month.
 - Export/import must preserve fixed expense records without mutating existing expenses.
 
 Savings suggestion is a read-only estimate, not an automatic transaction:
@@ -499,8 +504,8 @@ Use proper Turkish characters in UI strings when editing existing Turkish UI fil
 These items are known risks or production-hardening targets based on the current codebase:
 
 - `AndroidManifest.xml` currently has `android:allowBackup="true"`. For a privacy-first finance app, production should intentionally decide this and likely use `false`.
-- `AppDatabase` currently uses `exportSchema = false`. Production Room schema history should normally be exported and committed.
-- `DatabaseModule` currently uses `fallbackToDestructiveMigration()` and `fallbackToDestructiveMigrationOnDowngrade()`. Production builds should avoid destructive migrations for financial data.
+- Room schema export is enabled and schema files should be committed when database versions change.
+- Destructive migration fallback is intentionally disabled. New schema changes must provide explicit migrations.
 - Release build currently has `isMinifyEnabled = false`; production release should test R8/minification and resource shrinking.
 - Export/import, full ZIP backup, Room, and Kotlinx Serialization must be tested after minification.
 - Signing config should use Gradle properties or local files, never hardcoded secrets.

@@ -35,7 +35,7 @@ class JsonExportService @Inject constructor(
     suspend fun exportToJson(uri: Uri): ExportResult {
         return try {
             val dto = BudgetTrackerExportDto(
-                schemaVersion = 8,
+                schemaVersion = 9,
                 exportedAt = Instant.now().toString(),
                 salaryRules = salaryRepository.observeAllSalaryRules().first().map { 
                     SalaryRuleDto(it.id, it.amount, it.effectiveStartMonth.toString(), it.note) 
@@ -79,6 +79,7 @@ class JsonExportService @Inject constructor(
                         it.installmentGroupId,
                         it.subscriptionId,
                         it.loanId,
+                        it.fixedExpenseId,
                         it.originalAmount,
                         it.originalCurrency,
                         it.exchangeRateToTry,

@@ -64,6 +64,11 @@ class DashboardViewModel @Inject constructor(
             )
         }
     }
+
+    fun applySuggestedSaving(amount: Long) {
+        if (amount <= 0L) return
+        updateSavingGoal(amount)
+    }
 }
 
 sealed interface DashboardUiState {
