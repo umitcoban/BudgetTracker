@@ -37,8 +37,8 @@ BudgetTracker is a local-only personal finance and monthly budgeting app. It is 
 - Hilt: 2.51.1
 - Compose BOM: 2024.05.00
 - Database name: `budget_tracker_db`
-- Room database version: 7
-- JSON export schema version: 6
+- Room database version: 8
+- JSON export schema version: 7
 
 ## Non-Negotiable Product Rules
 
@@ -136,6 +136,7 @@ Architectural expectations:
 
 - Dashboard / monthly overview
 - Salary rules and monthly saving goals
+- Additional one-off income tracking
 - Expense tracking
 - Expense categories
 - Payment accounts and credit cards
@@ -189,6 +190,7 @@ The Room database currently includes these entities:
 - `ExpenseAttachmentEntity`
 - `CreditCardStatementPaymentEntity`
 - `ExpenseAdjustmentEntity`
+- `IncomeEntity`
 
 Default seeded categories:
 
@@ -240,13 +242,44 @@ JSON export/import:
 
 - `appName` must be `BudgetTracker`.
 - Unsupported future schema versions must be rejected.
-- Current JSON schema version is 4.
+- Current JSON schema version is 7.
 - Attachment metadata is included in schema version 2.
 - Credit card statement payment status is included in schema version 3.
 - Expense adjustments/refunds are included in schema version 4.
 - Foreign-currency expense metadata is included in schema version 5.
 - Foreign-currency subscription metadata is included in schema version 6.
+- Additional income records are included in schema version 7.
 - Replace-mode imports must be confirmed by the user.
+
+## Income Records Rule
+
+Salary rules remain the recurring monthly salary source. Additional one-off income must be stored separately as income records:
+
+```text
+incomes
+  title
+  amount
+  incomeDate
+  type
+  note
+```
+
+Examples:
+
+- Ek gelir
+- Prim
+- Freelance
+- Satış
+- Borç tahsilatı
+- Diğer
+
+Monthly summary uses:
+
+```text
+totalIncomeAmount = salaryAmount + additionalIncomeAmount
+```
+
+Remaining balance calculations must use total income, not salary alone.
 
 ## Foreign Currency Expense Rule
 

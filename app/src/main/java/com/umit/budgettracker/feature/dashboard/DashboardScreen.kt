@@ -107,6 +107,21 @@ fun DashboardScreen(
                     }
                     item {
                         SummaryCard(
+                            title = "Ek Gelirler",
+                            amount = MoneyFormatter.format(summary.additionalIncomeAmount),
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            onClick = { navController.navigate(Screen.Income.route) }
+                        )
+                    }
+                    item {
+                        SummaryCard(
+                            title = "Toplam Gelir",
+                            amount = MoneyFormatter.format(summary.totalIncomeAmount),
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                        )
+                    }
+                    item {
+                        SummaryCard(
                             title = "Birikim Hedefi",
                             amount = MoneyFormatter.format(summary.savingGoalAmount),
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,

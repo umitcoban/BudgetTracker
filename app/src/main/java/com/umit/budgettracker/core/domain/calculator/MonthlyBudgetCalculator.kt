@@ -10,6 +10,7 @@ import javax.inject.Inject
 class MonthlyBudgetCalculator @Inject constructor(
     private val salaryRepository: SalaryRepository,
     private val savingGoalRepository: SavingGoalRepository,
+    private val incomeRepository: IncomeRepository,
     private val expenseRepository: ExpenseRepository,
     private val budgetRepository: CategoryBudgetRepository,
     private val adjustmentRepository: ExpenseAdjustmentRepository,
@@ -17,19 +18,41 @@ class MonthlyBudgetCalculator @Inject constructor(
     private val loanCalculator: LoanMonthlyCalculator
 ) {
     fun getSummaryForMonth(month: YearMonth): Flow<MonthlyBudgetSummary> {
-        val baseFlow = combine(
+        val incomeFlow = combine(
             salaryRepository.observeAllSalaryRules(),
             savingGoalRepository.observeSavingGoalForMonth(month),
+            incomeRepository.observeIncomesForMonth(month)
+        ) { salaryRules, savingGoal, incomes ->
+            MonthlyIncomeInputs(
+                salaryRules = salaryRules,
+                savingGoal = savingGoal,
+                incomes = incomes
+            )
+        }
+
+        val expenseFlow = combine(
             expenseRepository.observeAllExpenses(),
             budgetRepository.observeBudgetsForMonth(month),
             adjustmentRepository.observeAllAdjustments()
-        ) { salaryRules, savingGoal, expenses, budgets, adjustments ->
-            MonthlyBudgetInputs(
-                salaryRules = salaryRules,
-                savingGoal = savingGoal,
+        ) { expenses, budgets, adjustments ->
+            MonthlyExpenseInputs(
                 expenses = expenses,
                 budgets = budgets,
                 adjustments = adjustments
+            )
+        }
+
+        val baseFlow = combine(
+            incomeFlow,
+            expenseFlow
+        ) { incomeInputs, expenseInputs ->
+            MonthlyBudgetInputs(
+                salaryRules = incomeInputs.salaryRules,
+                savingGoal = incomeInputs.savingGoal,
+                incomes = incomeInputs.incomes,
+                expenses = expenseInputs.expenses,
+                budgets = expenseInputs.budgets,
+                adjustments = expenseInputs.adjustments
             )
         }
 
@@ -48,6 +71,7 @@ class MonthlyBudgetCalculator @Inject constructor(
 
             val totalExpenses = plannedMonthExpenses.sumOf { it.netAmount(adjustmentsByExpenseId) }
             val savingGoalAmount = base.savingGoal?.amount ?: 0L
+            val additionalIncomeAmount = base.incomes.sumOf { it.amount }
             val totalCardExpense = calendarMonthExpenses
                 .filter { it.paymentSourceType == AccountType.CREDIT_CARD }
                 .sumOf { it.netAmount(adjustmentsByExpenseId) }
@@ -68,6 +92,7 @@ class MonthlyBudgetCalculator @Inject constructor(
             MonthlyBudgetSummary(
                 yearMonth = month,
                 salaryAmount = applicableSalary,
+                additionalIncomeAmount = additionalIncomeAmount,
                 savingGoalAmount = savingGoalAmount,
                 totalExpenseAmount = totalExpenses,
                 calendarCreditCardSpendingAmount = totalCardExpense,
@@ -124,9 +149,22 @@ private fun Expense.planningMonth(): YearMonth {
     }
 }
 
+private data class MonthlyIncomeInputs(
+    val salaryRules: List<SalaryRule>,
+    val savingGoal: MonthlySavingGoal?,
+    val incomes: List<Income>
+)
+
+private data class MonthlyExpenseInputs(
+    val expenses: List<Expense>,
+    val budgets: List<CategoryBudget>,
+    val adjustments: List<ExpenseAdjustment>
+)
+
 private data class MonthlyBudgetInputs(
     val salaryRules: List<SalaryRule>,
     val savingGoal: MonthlySavingGoal?,
+    val incomes: List<Income>,
     val expenses: List<Expense>,
     val budgets: List<CategoryBudget>,
     val adjustments: List<ExpenseAdjustment>

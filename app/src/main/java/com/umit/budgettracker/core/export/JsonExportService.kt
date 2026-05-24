@@ -13,6 +13,7 @@ import javax.inject.Inject
 class JsonExportService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val salaryRepository: SalaryRepository,
+    private val incomeRepository: IncomeRepository,
     private val savingGoalRepository: SavingGoalRepository,
     private val categoryRepository: CategoryRepository,
     private val accountRepository: PaymentAccountRepository,
@@ -33,10 +34,13 @@ class JsonExportService @Inject constructor(
     suspend fun exportToJson(uri: Uri): ExportResult {
         return try {
             val dto = BudgetTrackerExportDto(
-                schemaVersion = 6,
+                schemaVersion = 7,
                 exportedAt = Instant.now().toString(),
                 salaryRules = salaryRepository.observeAllSalaryRules().first().map { 
                     SalaryRuleDto(it.id, it.amount, it.effectiveStartMonth.toString(), it.note) 
+                },
+                incomes = incomeRepository.observeAllIncomes().first().map {
+                    IncomeDto(it.id, it.title, it.amount, it.incomeDate.toEpochDay(), it.type.name, it.note)
                 },
                 savingGoals = savingGoalRepository.observeAllSavingGoals().first().map { 
                     MonthlySavingGoalDto(it.yearMonth.toString(), it.amount, it.note) 

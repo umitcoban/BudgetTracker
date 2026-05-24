@@ -35,7 +35,7 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME
-        ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+        ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .fallbackToDestructiveMigration()
             .fallbackToDestructiveMigrationOnDowngrade()
             .addCallback(object : RoomDatabase.Callback() {
@@ -95,6 +95,26 @@ object DatabaseModule {
             addNullableColumnIfMissing(db, "subscriptions", "exchangeRateScale", "INTEGER")
             addNullableColumnIfMissing(db, "subscriptions", "exchangeRateSource", "TEXT")
             addNullableColumnIfMissing(db, "subscriptions", "exchangeRateUpdatedAt", "INTEGER")
+        }
+    }
+
+    private val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `incomes` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `amount` INTEGER NOT NULL,
+                    `incomeDate` INTEGER NOT NULL,
+                    `type` TEXT NOT NULL,
+                    `note` TEXT,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_incomes_incomeDate` ON `incomes` (`incomeDate`)")
         }
     }
 
@@ -214,4 +234,7 @@ object DatabaseModule {
 
     @Provides
     fun provideExpenseAdjustmentDao(db: AppDatabase): ExpenseAdjustmentDao = db.expenseAdjustmentDao()
+
+    @Provides
+    fun provideIncomeDao(db: AppDatabase): IncomeDao = db.incomeDao()
 }

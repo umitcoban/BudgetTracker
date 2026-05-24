@@ -12,6 +12,7 @@ import com.umit.budgettracker.feature.reports.ReportsScreen
 import com.umit.budgettracker.feature.salary.SalaryScreen
 import com.umit.budgettracker.feature.settings.SettingsScreen
 import com.umit.budgettracker.feature.installments.InstallmentsScreen
+import com.umit.budgettracker.feature.income.IncomeScreen
 import com.umit.budgettracker.feature.subscriptions.SubscriptionsScreen
 import com.umit.budgettracker.feature.loans.LoansScreen
 import com.umit.budgettracker.feature.cashflow.CashFlowScreen
@@ -48,6 +49,9 @@ fun NavGraph(
         }
         composable(Screen.SalaryManagement.route) {
             SalaryScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.Income.route) {
+            IncomeScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.Installments.route) {
             InstallmentsScreen(onBack = { navController.popBackStack() })
