@@ -193,6 +193,14 @@ fun DashboardScreen(
                             )
                         }
                     }
+                    item {
+                        SummaryCard(
+                            title = "Sabit Giderler",
+                            amount = MoneyFormatter.format(summary.fixedExpenseAmount),
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            onClick = { navController.navigate(Screen.FixedExpenses.route) }
+                        )
+                    }
 
                     item {
                         Text(text = "Projeksiyon", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -211,6 +219,10 @@ fun DashboardScreen(
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text(text = "Birikim + Sabit Ödemeler Sonrası:", style = MaterialTheme.typography.bodySmall)
                                     Text(text = MoneyFormatter.format(summary.remainingAfterSavingAndFixedPayments), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                }
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(text = "Birikim Önerisi:", style = MaterialTheme.typography.bodySmall)
+                                    Text(text = MoneyFormatter.format(summary.suggestedSavingAmount), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                 }
                             }
                         }

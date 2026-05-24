@@ -15,7 +15,8 @@ class MonthlyBudgetCalculator @Inject constructor(
     private val budgetRepository: CategoryBudgetRepository,
     private val adjustmentRepository: ExpenseAdjustmentRepository,
     private val subscriptionCalculator: SubscriptionMonthlyCalculator,
-    private val loanCalculator: LoanMonthlyCalculator
+    private val loanCalculator: LoanMonthlyCalculator,
+    private val fixedExpenseCalculator: FixedExpenseMonthlyCalculator
 ) {
     fun getSummaryForMonth(month: YearMonth): Flow<MonthlyBudgetSummary> {
         val incomeFlow = combine(
@@ -59,8 +60,9 @@ class MonthlyBudgetCalculator @Inject constructor(
         return combine(
             baseFlow,
             subscriptionCalculator.getPaymentsForMonth(month),
-            loanCalculator.getPaymentsForMonth(month)
-        ) { base, subscriptions, loans ->
+            loanCalculator.getPaymentsForMonth(month),
+            fixedExpenseCalculator.getPaymentsForMonth(month)
+        ) { base, subscriptions, loans, fixedExpenses ->
             val applicableSalary = base.salaryRules
                 .filter { !it.effectiveStartMonth.isAfter(month) }
                 .maxByOrNull { it.effectiveStartMonth }?.amount ?: 0L
@@ -88,6 +90,9 @@ class MonthlyBudgetCalculator @Inject constructor(
                 .sumOf { it.netAmount(adjustmentsByExpenseId) }
             val totalSubscriptionsPlanned = subscriptions.sumOf { it.amount }
             val totalLoans = loans.sumOf { it.amount }
+            val totalFixedExpenses = fixedExpenses.sumOf { it.amount }
+            val suggestedSaving = ((applicableSalary + additionalIncomeAmount - totalExpenses - totalSubscriptionsUnpaid - totalLoans - totalFixedExpenses) / 2)
+                .coerceAtLeast(0L)
 
             MonthlyBudgetSummary(
                 yearMonth = month,
@@ -103,6 +108,8 @@ class MonthlyBudgetCalculator @Inject constructor(
                 subscriptionPaidAmount = totalSubscriptionsPaid,
                 subscriptionUnpaidPlannedAmount = totalSubscriptionsUnpaid,
                 loanPaymentAmount = totalLoans,
+                fixedExpenseAmount = totalFixedExpenses,
+                suggestedSavingAmount = suggestedSaving,
                 categorySummaries = base.budgets.map { budget ->
                     val spent = plannedMonthExpenses
                         .filter { it.categoryId == budget.categoryId }

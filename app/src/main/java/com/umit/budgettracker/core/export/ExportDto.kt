@@ -9,6 +9,7 @@ data class BudgetTrackerExportDto(
     val exportedAt: String,
     val salaryRules: List<SalaryRuleDto>,
     val incomes: List<IncomeDto> = emptyList(),
+    val fixedExpenses: List<FixedExpenseDto> = emptyList(),
     val savingGoals: List<MonthlySavingGoalDto>,
     val categories: List<CategoryDto>,
     val paymentAccounts: List<PaymentAccountDto>,
@@ -31,6 +32,20 @@ data class SalaryRuleDto(val id: Long, val amount: Long, val effectiveStartMonth
 
 @Serializable
 data class IncomeDto(val id: Long, val title: String, val amount: Long, val incomeDate: Long, val type: String, val note: String?)
+
+@Serializable
+data class FixedExpenseDto(
+    val id: Long,
+    val title: String,
+    val amount: Long,
+    val dayOfMonth: Int,
+    val startMonth: String,
+    val endMonth: String?,
+    val categoryId: Long?,
+    val paymentAccountId: Long?,
+    val note: String?,
+    val isActive: Boolean
+)
 
 @Serializable
 data class MonthlySavingGoalDto(val yearMonth: String, val amount: Long, val note: String?)
