@@ -5,6 +5,7 @@ import java.time.YearMonth
 data class MonthlyBudgetSummary(
     val yearMonth: YearMonth,
     val salaryAmount: Long = 0,
+    val additionalIncomeAmount: Long = 0,
     val savingGoalAmount: Long = 0,
     val totalExpenseAmount: Long = 0,
     val calendarCreditCardSpendingAmount: Long = 0,
@@ -18,11 +19,12 @@ data class MonthlyBudgetSummary(
     val categorySummaries: List<CategorySummary> = emptyList(),
     val warnings: List<BudgetWarning> = emptyList()
 ) {
-    val remainingBeforeSaving: Long get() = salaryAmount - totalExpenseAmount
-    val remainingAfterSaving: Long get() = salaryAmount - totalExpenseAmount - savingGoalAmount
+    val totalIncomeAmount: Long get() = salaryAmount + additionalIncomeAmount
+    val remainingBeforeSaving: Long get() = totalIncomeAmount - totalExpenseAmount
+    val remainingAfterSaving: Long get() = totalIncomeAmount - totalExpenseAmount - savingGoalAmount
     val projectedFixedPaymentsAmount: Long get() = subscriptionAmount + loanPaymentAmount
-    val remainingAfterFixedPayments: Long get() = salaryAmount - totalExpenseAmount - projectedFixedPaymentsAmount
-    val remainingAfterSavingAndFixedPayments: Long get() = salaryAmount - totalExpenseAmount - projectedFixedPaymentsAmount - savingGoalAmount
+    val remainingAfterFixedPayments: Long get() = totalIncomeAmount - totalExpenseAmount - projectedFixedPaymentsAmount
+    val remainingAfterSavingAndFixedPayments: Long get() = totalIncomeAmount - totalExpenseAmount - projectedFixedPaymentsAmount - savingGoalAmount
 }
 
 data class CategorySummary(

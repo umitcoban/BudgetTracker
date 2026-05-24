@@ -29,7 +29,7 @@ class JsonImportService @Inject constructor(
                 return ImportResult.Error("Bu dosya BudgetTracker uygulamasına ait değil.")
             }
             
-            if (dto.schemaVersion > 6) {
+            if (dto.schemaVersion > 7) {
                 return ImportResult.Error("Bu yedek dosyası uygulamanın desteklemediği bir sürüme ait.")
             }
 
@@ -40,6 +40,9 @@ class JsonImportService @Inject constructor(
                 db.paymentAccountDao().insertAll(dto.paymentAccounts.map { it.toEntity() })
                 db.installmentGroupDao().insertAll(dto.installmentGroups.map { it.toEntity() })
                 db.salaryRuleDao().insertAll(dto.salaryRules.map { it.toEntity() })
+                if (dto.schemaVersion >= 7) {
+                    db.incomeDao().insertAll(dto.incomes.map { it.toEntity() })
+                }
                 db.monthlySavingGoalDao().insertAll(dto.savingGoals.map { it.toEntity() })
                 db.expenseDao().insertAll(dto.expenses.map { it.toEntity() })
                 db.loanDao().insertAll(dto.loans.map { it.toEntity() })
@@ -80,6 +83,7 @@ sealed class ImportResult {
 private fun CategoryDto.toEntity() = com.umit.budgettracker.core.database.entity.CategoryEntity(id, name, iconName, colorValue, type, isDefault, isActive, sortOrder)
 private fun PaymentAccountDto.toEntity() = com.umit.budgettracker.core.database.entity.PaymentAccountEntity(id, name, type, statementDay, dueDay, isActive)
 private fun SalaryRuleDto.toEntity() = com.umit.budgettracker.core.database.entity.SalaryRuleEntity(id, amount, effectiveStartMonth, note)
+private fun IncomeDto.toEntity() = com.umit.budgettracker.core.database.entity.IncomeEntity(id, title, amount, incomeDate, type, note)
 private fun MonthlySavingGoalDto.toEntity() = com.umit.budgettracker.core.database.entity.MonthlySavingGoalEntity(yearMonth, amount, note)
 private fun ExpenseDto.toEntity() = com.umit.budgettracker.core.database.entity.ExpenseEntity(
     id = id,

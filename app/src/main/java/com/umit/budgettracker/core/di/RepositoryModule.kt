@@ -75,4 +75,8 @@ abstract class RepositoryModule {
     abstract fun bindExpenseAdjustmentRepository(
         impl: ExpenseAdjustmentRepositoryImpl
     ): ExpenseAdjustmentRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindIncomeRepository(impl: IncomeRepositoryImpl): IncomeRepository
 }

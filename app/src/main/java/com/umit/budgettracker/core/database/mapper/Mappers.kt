@@ -89,6 +89,24 @@ fun MonthlySavingGoal.toEntity() = MonthlySavingGoalEntity(
     note = note
 )
 
+fun IncomeEntity.toDomain() = Income(
+    id = id,
+    title = title,
+    amount = amount,
+    incomeDate = LocalDate.ofEpochDay(incomeDate),
+    type = IncomeType.valueOf(type),
+    note = note
+)
+
+fun Income.toEntity() = IncomeEntity(
+    id = id,
+    title = title,
+    amount = amount,
+    incomeDate = incomeDate.toEpochDay(),
+    type = type.name,
+    note = note
+)
+
 fun ExpenseEntity.toDomain(category: Category? = null, account: PaymentAccount? = null) = Expense(
     id = id,
     title = title,
