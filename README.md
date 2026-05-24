@@ -12,6 +12,7 @@ Privacy-first, local-only Android budgeting app built with Kotlin, Jetpack Compo
 
 - Monthly dashboard with salary, additional income, spending, saving goals, savings suggestion, and projections
 - Fixed recurring expense tracking for rent, dues, insurance, and similar predictable payments
+- One-tap processing of fixed expenses into real expense records with duplicate prevention
 - Expense tracking with categories and payment accounts
 - Credit card statement and due-date tracking
 - Installment purchase support
@@ -103,4 +104,5 @@ Release sanity check:
 - Keep all user-facing app text in Turkish.
 - Keep the app local-only.
 - Avoid destructive migrations for production financial data.
+- Add explicit Room migrations and commit schema files for database changes.
 - Do not store receipt images as Room BLOBs; store files under app-private storage and keep metadata in Room.

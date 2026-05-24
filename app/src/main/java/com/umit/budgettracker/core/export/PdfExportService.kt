@@ -41,12 +41,30 @@ class PdfExportService @Inject constructor(
             // Summary section
             drawRow(canvas, paint, "Maaş", MoneyFormatter.format(summary.salaryAmount), 50f, y)
             y += 20f
+            drawRow(canvas, paint, "Ek Gelirler", MoneyFormatter.format(summary.additionalIncomeAmount), 50f, y)
+            y += 20f
+            paint.isFakeBoldText = true
+            drawRow(canvas, paint, "Toplam Gelir", MoneyFormatter.format(summary.totalIncomeAmount), 50f, y)
+            paint.isFakeBoldText = false
+            y += 20f
             drawRow(canvas, paint, "Tasarruf Hedefi", MoneyFormatter.format(summary.savingGoalAmount), 50f, y)
             y += 20f
             drawRow(canvas, paint, "Toplam Harcama", MoneyFormatter.format(summary.totalExpenseAmount), 50f, y)
             y += 20f
+            drawRow(canvas, paint, "Abonelikler", MoneyFormatter.format(summary.subscriptionPlannedAmount), 50f, y)
+            y += 20f
+            drawRow(canvas, paint, "Kredi Ödemeleri", MoneyFormatter.format(summary.loanPaymentAmount), 50f, y)
+            y += 20f
+            drawRow(canvas, paint, "Sabit Giderler", MoneyFormatter.format(summary.fixedExpenseAmount), 50f, y)
+            y += 20f
+            drawRow(canvas, paint, "Toplam Planlı Sabit Ödeme", MoneyFormatter.format(summary.projectedFixedPaymentsAmount), 50f, y)
+            y += 20f
+            drawRow(canvas, paint, "Birikim Önerisi", MoneyFormatter.format(summary.suggestedSavingAmount), 50f, y)
+            y += 20f
             paint.isFakeBoldText = true
             drawRow(canvas, paint, "Kalan (Birikim Sonrası)", MoneyFormatter.format(summary.remainingAfterSaving), 50f, y)
+            y += 20f
+            drawRow(canvas, paint, "Sabit Ödemeler Sonrası Kalan", MoneyFormatter.format(summary.remainingAfterFixedPayments), 50f, y)
             y += 40f
 
             // Categories

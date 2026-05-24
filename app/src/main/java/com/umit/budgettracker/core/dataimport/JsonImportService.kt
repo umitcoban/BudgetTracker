@@ -29,7 +29,7 @@ class JsonImportService @Inject constructor(
                 return ImportResult.Error("Bu dosya BudgetTracker uygulamasına ait değil.")
             }
             
-            if (dto.schemaVersion > 8) {
+            if (dto.schemaVersion > 9) {
                 return ImportResult.Error("Bu yedek dosyası uygulamanın desteklemediği bir sürüme ait.")
             }
 
@@ -101,6 +101,7 @@ private fun ExpenseDto.toEntity() = com.umit.budgettracker.core.database.entity.
     installmentGroupId = installmentGroupId,
     subscriptionId = subscriptionId,
     loanId = loanId,
+    fixedExpenseId = fixedExpenseId,
     originalAmount = originalAmount,
     originalCurrency = originalCurrency,
     exchangeRateToTry = exchangeRateToTry,

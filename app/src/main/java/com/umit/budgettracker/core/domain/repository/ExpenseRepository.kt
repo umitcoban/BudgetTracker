@@ -13,4 +13,5 @@ interface ExpenseRepository {
     suspend fun deleteExpense(expense: Expense)
     suspend fun hasSubscriptionExpenseForMonth(subscriptionId: Long, yearMonth: YearMonth): Boolean
     suspend fun hasAnySubscriptionExpense(subscriptionId: Long): Boolean
+    suspend fun hasFixedExpenseForMonth(fixedExpenseId: Long, yearMonth: YearMonth): Boolean
 }

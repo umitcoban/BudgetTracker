@@ -128,6 +128,32 @@ fun DashboardScreen(
                             onClick = { showSavingGoalDialog = true }
                         )
                     }
+
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(text = "Net Nakit", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(text = "Harcamalar Sonrası:", style = MaterialTheme.typography.bodySmall)
+                                    Text(text = MoneyFormatter.format(summary.remainingBeforeSaving), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                }
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(text = "Planlı Ödemeler Sonrası:", style = MaterialTheme.typography.bodySmall)
+                                    Text(text = MoneyFormatter.format(summary.remainingAfterFixedPayments), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                }
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(text = "Hedef Sonrası:", style = MaterialTheme.typography.bodySmall)
+                                    Text(text = MoneyFormatter.format(summary.remainingAfterSavingAndFixedPayments), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
                     
                     item {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -223,6 +249,13 @@ fun DashboardScreen(
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text(text = "Birikim Önerisi:", style = MaterialTheme.typography.bodySmall)
                                     Text(text = MoneyFormatter.format(summary.suggestedSavingAmount), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                }
+                                TextButton(
+                                    enabled = summary.suggestedSavingAmount > 0,
+                                    onClick = { viewModel.applySuggestedSaving(summary.suggestedSavingAmount) },
+                                    modifier = Modifier.align(Alignment.End)
+                                ) {
+                                    Text("Öneriyi hedef yap")
                                 }
                             }
                         }

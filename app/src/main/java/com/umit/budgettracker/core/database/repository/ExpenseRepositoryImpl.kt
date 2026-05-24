@@ -54,4 +54,10 @@ class ExpenseRepositoryImpl @Inject constructor(
     override suspend fun hasAnySubscriptionExpense(subscriptionId: Long): Boolean {
         return expenseDao.countBySubscriptionId(subscriptionId) > 0
     }
+
+    override suspend fun hasFixedExpenseForMonth(fixedExpenseId: Long, yearMonth: YearMonth): Boolean {
+        val startDate = yearMonth.atDay(1).toEpochDay()
+        val endDate = yearMonth.atEndOfMonth().toEpochDay()
+        return expenseDao.countFixedExpenseExpensesForPeriod(fixedExpenseId, startDate, endDate) > 0
+    }
 }

@@ -20,7 +20,7 @@ class CsvExportService @Inject constructor(
             context.contentResolver.openOutputStream(uri)?.use { outputStream ->
                 BufferedWriter(OutputStreamWriter(outputStream)).use { writer ->
                     // Header
-                    writer.write("ID,Tarih,Başlık,Miktar (Kuruş),Miktar (TL),Kategori,Hesap,Hesap Türü,Not,Taksit Grubu ID,Abonelik ID,Kredi ID\n")
+                    writer.write("ID,Tarih,Başlık,Miktar (Kuruş),Miktar (TL),Kategori,Hesap,Hesap Türü,Not,Taksit Grubu ID,Abonelik ID,Kredi ID,Sabit Gider ID\n")
                     
                     expenses.forEach { e ->
                         val line = listOf(
@@ -34,8 +34,9 @@ class CsvExportService @Inject constructor(
                             escapeCsv(e.paymentSourceType.name),
                             escapeCsv(e.note ?: ""),
                             e.installmentGroupId?.toString() ?: "",
-                            "", // subscriptionId placeholder
-                            ""  // loanId placeholder
+                            e.subscriptionId?.toString() ?: "",
+                            e.loanId?.toString() ?: "",
+                            e.fixedExpenseId?.toString() ?: ""
                         ).joinToString(",")
                         writer.write(line + "\n")
                     }

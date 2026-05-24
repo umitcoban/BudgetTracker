@@ -90,7 +90,10 @@ class MonthlyBudgetCalculator @Inject constructor(
                 .sumOf { it.netAmount(adjustmentsByExpenseId) }
             val totalSubscriptionsPlanned = subscriptions.sumOf { it.amount }
             val totalLoans = loans.sumOf { it.amount }
-            val totalFixedExpenses = fixedExpenses.sumOf { it.amount }
+            val paidFixedExpenseIds = plannedMonthExpenses.mapNotNull { it.fixedExpenseId }.toSet()
+            val totalFixedExpenses = fixedExpenses
+                .filter { it.fixedExpenseId !in paidFixedExpenseIds }
+                .sumOf { it.amount }
             val suggestedSaving = ((applicableSalary + additionalIncomeAmount - totalExpenses - totalSubscriptionsUnpaid - totalLoans - totalFixedExpenses) / 2)
                 .coerceAtLeast(0L)
 

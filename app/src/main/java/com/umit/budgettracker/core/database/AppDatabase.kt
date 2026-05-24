@@ -28,8 +28,8 @@ import com.umit.budgettracker.core.database.entity.*
         IncomeEntity::class,
         FixedExpenseEntity::class
     ],
-    version = 9,
-    exportSchema = false
+    version = 10,
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

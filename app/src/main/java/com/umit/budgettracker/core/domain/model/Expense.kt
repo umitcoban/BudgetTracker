@@ -14,6 +14,7 @@ data class Expense(
     val installmentGroupId: Long? = null,
     val subscriptionId: Long? = null,
     val loanId: Long? = null,
+    val fixedExpenseId: Long? = null,
     val originalAmount: Long? = null,
     val originalCurrency: String? = null,
     val exchangeRateToTry: Long? = null,

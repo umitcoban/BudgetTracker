@@ -615,6 +615,7 @@ fun ExpenseDialog(
                                 installmentGroupId = existingExpense?.installmentGroupId,
                                 subscriptionId = existingExpense?.subscriptionId,
                                 loanId = existingExpense?.loanId,
+                                fixedExpenseId = existingExpense?.fixedExpenseId,
                                 originalAmount = originalAmount.takeIf { selectedCurrency != "TRY" },
                                 originalCurrency = selectedCurrency.takeIf { selectedCurrency != "TRY" },
                                 exchangeRateToTry = rate.takeIf { selectedCurrency != "TRY" },

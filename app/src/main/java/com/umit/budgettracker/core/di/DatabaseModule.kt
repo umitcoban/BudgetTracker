@@ -35,9 +35,7 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME
-        ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
-            .fallbackToDestructiveMigration()
-            .fallbackToDestructiveMigrationOnDowngrade()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
             .addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
                 super.onCreate(db)
@@ -47,6 +45,10 @@ object DatabaseModule {
                 }
             }
         }).build()
+    }
+
+    private val MIGRATION_1_2 = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) = Unit
     }
 
     private val MIGRATION_2_3 = object : Migration(2, 3) {
@@ -140,6 +142,12 @@ object DatabaseModule {
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_fixed_expenses_startMonth` ON `fixed_expenses` (`startMonth`)")
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_fixed_expenses_endMonth` ON `fixed_expenses` (`endMonth`)")
+        }
+    }
+
+    private val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            addNullableColumnIfMissing(db, "expenses", "fixedExpenseId", "INTEGER")
         }
     }
 

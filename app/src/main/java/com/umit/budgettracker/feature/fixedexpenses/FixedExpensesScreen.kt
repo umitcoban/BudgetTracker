@@ -18,19 +18,26 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,8 +48,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.umit.budgettracker.core.domain.model.Category
 import com.umit.budgettracker.core.domain.model.FixedExpense
+import com.umit.budgettracker.core.domain.model.PaymentAccount
+import com.umit.budgettracker.core.ui.IconMapper
 import com.umit.budgettracker.core.util.MoneyFormatter
+import com.umit.budgettracker.feature.dashboard.MonthSelector
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.YearMonth
@@ -54,8 +65,20 @@ fun FixedExpensesScreen(
     viewModel: FixedExpensesViewModel = hiltViewModel()
 ) {
     val fixedExpenses by viewModel.fixedExpenses.collectAsState()
+    val selectedMonth by viewModel.selectedMonth.collectAsState()
+    val categories by viewModel.categories.collectAsState()
+    val accounts by viewModel.accounts.collectAsState()
+    val message by viewModel.message.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
     var editingExpense by remember { mutableStateOf<FixedExpense?>(null) }
     var showDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(message) {
+        message?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearMessage()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -65,9 +88,17 @@ fun FixedExpensesScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
                     }
+                },
+                actions = {
+                    MonthSelector(
+                        selectedMonth = selectedMonth,
+                        onMonthChange = { viewModel.previousMonth() },
+                        onNextMonth = { viewModel.nextMonth() }
+                    )
                 }
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
@@ -99,7 +130,8 @@ fun FixedExpensesScreen(
                             editingExpense = expense
                             showDialog = true
                         },
-                        onDelete = { viewModel.deleteFixedExpense(expense) }
+                        onDelete = { viewModel.deleteFixedExpense(expense) },
+                        onMarkAsPaid = { viewModel.markAsPaid(expense) }
                     )
                 }
             }
@@ -108,6 +140,8 @@ fun FixedExpensesScreen(
         if (showDialog) {
             FixedExpenseDialog(
                 existingExpense = editingExpense,
+                categories = categories,
+                accounts = accounts,
                 onDismiss = { showDialog = false },
                 onConfirm = {
                     viewModel.saveFixedExpense(it)
@@ -122,31 +156,47 @@ fun FixedExpensesScreen(
 private fun FixedExpenseRow(
     expense: FixedExpense,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onMarkAsPaid: () -> Unit
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Card(modifier = Modifier.fillMaxWidth(), onClick = onEdit) {
-        Row(
+        Column(
             modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(expense.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(
-                    text = "Her ay ${expense.dayOfMonth}. gün • ${expense.startMonth}${expense.endMonth?.let { " - $it" } ?: ""}",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                if (!expense.isActive) {
-                    Text("Pasif", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(expense.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "Her ay ${expense.dayOfMonth}. gün • ${expense.startMonth}${expense.endMonth?.let { " - $it" } ?: ""}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    if (!expense.isActive) {
+                        Text("Pasif", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                    }
+                    Text(
+                        text = "${expense.category?.name ?: "Kategori seçilmedi"} • ${expense.account?.name ?: "Hesap seçilmedi"}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(MoneyFormatter.format(expense.amount), fontWeight = FontWeight.Bold)
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Default.Edit, contentDescription = "Düzenle")
+                }
+                IconButton(onClick = { showDeleteConfirm = true }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Sil")
                 }
             }
-            Text(MoneyFormatter.format(expense.amount), fontWeight = FontWeight.Bold)
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Default.Edit, contentDescription = "Düzenle")
-            }
-            IconButton(onClick = { showDeleteConfirm = true }) {
-                Icon(Icons.Default.Delete, contentDescription = "Sil")
+            Button(
+                onClick = onMarkAsPaid,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("Harcamalara İşle")
             }
         }
     }
@@ -175,9 +225,12 @@ private fun FixedExpenseRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FixedExpenseDialog(
     existingExpense: FixedExpense?,
+    categories: List<Category>,
+    accounts: List<PaymentAccount>,
     onDismiss: () -> Unit,
     onConfirm: (FixedExpense) -> Unit
 ) {
@@ -188,6 +241,10 @@ private fun FixedExpenseDialog(
     var endMonthText by remember { mutableStateOf(existingExpense?.endMonth?.toString().orEmpty()) }
     var note by remember { mutableStateOf(existingExpense?.note.orEmpty()) }
     var isActive by remember { mutableStateOf(existingExpense?.isActive ?: true) }
+    var selectedCategory by remember { mutableStateOf(existingExpense?.category ?: categories.firstOrNull { it.id == existingExpense?.categoryId } ?: categories.firstOrNull()) }
+    var selectedAccount by remember { mutableStateOf(existingExpense?.account ?: accounts.firstOrNull { it.id == existingExpense?.paymentAccountId } ?: accounts.firstOrNull()) }
+    var categoryExpanded by remember { mutableStateOf(false) }
+    var accountExpanded by remember { mutableStateOf(false) }
 
     val amount = MoneyFormatter.parse(amountText)
     val day = dayText.toIntOrNull() ?: 0
@@ -198,6 +255,8 @@ private fun FixedExpenseDialog(
         (amount ?: 0L) > 0 &&
         day in 1..31 &&
         startMonth != null &&
+        selectedCategory != null &&
+        selectedAccount != null &&
         !endMonthInvalid &&
         (endMonth == null || !endMonth.isBefore(startMonth))
 
@@ -236,6 +295,64 @@ private fun FixedExpenseDialog(
                     label = { Text("Bitiş Ayı (Opsiyonel)") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                ExposedDropdownMenuBox(
+                    expanded = categoryExpanded,
+                    onExpandedChange = { categoryExpanded = !categoryExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedCategory?.name ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Kategori") },
+                        leadingIcon = {
+                            selectedCategory?.let { Icon(IconMapper.getIcon(it.iconName), contentDescription = null) }
+                        },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = categoryExpanded,
+                        onDismissRequest = { categoryExpanded = false }
+                    ) {
+                        categories.forEach { category ->
+                            DropdownMenuItem(
+                                text = { Text(category.name) },
+                                leadingIcon = { Icon(IconMapper.getIcon(category.iconName), contentDescription = null) },
+                                onClick = {
+                                    selectedCategory = category
+                                    categoryExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                ExposedDropdownMenuBox(
+                    expanded = accountExpanded,
+                    onExpandedChange = { accountExpanded = !accountExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedAccount?.name ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Ödeme Hesabı") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = accountExpanded,
+                        onDismissRequest = { accountExpanded = false }
+                    ) {
+                        accounts.forEach { account ->
+                            DropdownMenuItem(
+                                text = { Text(account.name) },
+                                onClick = {
+                                    selectedAccount = account
+                                    accountExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
@@ -261,10 +378,12 @@ private fun FixedExpenseDialog(
                             dayOfMonth = day,
                             startMonth = startMonth!!,
                             endMonth = endMonth,
-                            categoryId = existingExpense?.categoryId,
-                            paymentAccountId = existingExpense?.paymentAccountId,
+                            categoryId = selectedCategory!!.id,
+                            paymentAccountId = selectedAccount!!.id,
                             note = note.ifBlank { null },
-                            isActive = isActive
+                            isActive = isActive,
+                            category = selectedCategory,
+                            account = selectedAccount
                         )
                     )
                 }
