@@ -19,10 +19,15 @@ object SubscriptionRules {
         subscriptionId: Long,
         histories: List<SubscriptionPriceHistory>,
         month: YearMonth
-    ): Long? {
+    ): Long? = priceEntryForMonth(subscriptionId, histories, month)?.amount
+
+    fun priceEntryForMonth(
+        subscriptionId: Long,
+        histories: List<SubscriptionPriceHistory>,
+        month: YearMonth
+    ): SubscriptionPriceHistory? {
         return histories
             .filter { it.subscriptionId == subscriptionId && !it.effectiveFromMonth.isAfter(month) }
             .maxByOrNull { it.effectiveFromMonth }
-            ?.amount
     }
 }

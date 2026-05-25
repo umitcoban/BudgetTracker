@@ -3,10 +3,11 @@ package com.umit.budgettracker.core.export
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class JsonSerializationTest {
-    private val json = Json { prettyPrint = true }
+    private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
     @Test
     fun testSerializationRoundTrip() {
@@ -34,5 +35,42 @@ class JsonSerializationTest {
         assertEquals(dto.schemaVersion, decodedDto.schemaVersion)
         assertEquals(dto.salaryRules.size, decodedDto.salaryRules.size)
         assertEquals(dto.salaryRules[0].amount, decodedDto.salaryRules[0].amount)
+    }
+
+    @Test
+    fun oldSchemaWithoutNewNullableFields_decodesWithDefaults() {
+        val jsonString = """
+            {
+              "appName": "BudgetTracker",
+              "schemaVersion": 9,
+              "exportedAt": "2026-05-23T12:00:00Z",
+              "salaryRules": [],
+              "incomes": [],
+              "fixedExpenses": [],
+              "savingGoals": [],
+              "categories": [],
+              "paymentAccounts": [],
+              "expenses": [],
+              "installmentGroups": [],
+              "loans": [],
+              "subscriptions": [],
+              "subscriptionPriceHistory": [
+                {"id": 1, "subscriptionId": 1, "amount": 50000, "effectiveFromMonth": "2026-05"}
+              ],
+              "categoryBudgets": [],
+              "expenseTemplates": [],
+              "debtRecords": [],
+              "netWorthSnapshots": [],
+              "expenseAttachments": [],
+              "creditCardStatementPayments": [],
+              "expenseAdjustments": []
+            }
+        """.trimIndent()
+
+        val decoded = json.decodeFromString<BudgetTrackerExportDto>(jsonString)
+
+        assertEquals(9, decoded.schemaVersion)
+        assertEquals(50_000L, decoded.subscriptionPriceHistory.single().amount)
+        assertNull(decoded.subscriptionPriceHistory.single().originalCurrency)
     }
 }

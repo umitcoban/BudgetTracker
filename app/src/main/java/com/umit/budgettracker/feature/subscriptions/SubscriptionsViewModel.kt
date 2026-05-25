@@ -96,8 +96,9 @@ class SubscriptionsViewModel @Inject constructor(
         }
     }
 
-    fun updateSubscription(subscription: Subscription, newAmount: Long?, effectiveMonth: YearMonth?) {
+    fun updateSubscription(previousSubscription: Subscription, subscription: Subscription, newAmount: Long?, effectiveMonth: YearMonth?) {
         viewModelScope.launch {
+            repository.backfillMissingPriceHistoryCurrency(previousSubscription)
             repository.upsertSubscription(subscription)
             if (newAmount != null && effectiveMonth != null) {
                 repository.addPriceHistory(
@@ -105,7 +106,12 @@ class SubscriptionsViewModel @Inject constructor(
                         id = 0,
                         subscriptionId = subscription.id,
                         amount = newAmount,
-                        effectiveFromMonth = effectiveMonth
+                        effectiveFromMonth = effectiveMonth,
+                        originalCurrency = subscription.originalCurrency ?: "TRY",
+                        exchangeRateToTry = subscription.exchangeRateToTry,
+                        exchangeRateScale = subscription.exchangeRateScale,
+                        exchangeRateSource = subscription.exchangeRateSource,
+                        exchangeRateUpdatedAt = subscription.exchangeRateUpdatedAt
                     )
                 )
                 _selectedMonth.value = effectiveMonth

@@ -35,6 +35,33 @@ class MarkSubscriptionPaymentAsPaidUseCaseTest {
         assertEquals(10L, repository.saved.single().subscriptionId)
     }
 
+    @Test
+    fun invoke_preservesForeignCurrencyMetadata() = runBlocking {
+        val repository = FakeExpenseRepository()
+        val useCase = MarkSubscriptionPaymentAsPaidUseCase(repository)
+        val payment = SubscriptionMonthlyPayment(
+            subscriptionId = 11L,
+            title = "Euro App",
+            amount = 32_000L,
+            originalAmount = 800L,
+            originalCurrency = "EUR",
+            exchangeRateToTry = 40_0000L,
+            exchangeRateScale = 10_000,
+            exchangeRateSource = "MANUAL",
+            exchangeRateUpdatedAt = 1L,
+            billingDay = 5,
+            categoryId = 2L,
+            paymentAccountId = 3L
+        )
+
+        useCase(payment, YearMonth.of(2026, 7))
+
+        assertEquals(32_000L, repository.saved.single().amount)
+        assertEquals(800L, repository.saved.single().originalAmount)
+        assertEquals("EUR", repository.saved.single().originalCurrency)
+        assertEquals(40_0000L, repository.saved.single().exchangeRateToTry)
+    }
+
     private class FakeExpenseRepository : ExpenseRepository {
         val saved = mutableListOf<Expense>()
 

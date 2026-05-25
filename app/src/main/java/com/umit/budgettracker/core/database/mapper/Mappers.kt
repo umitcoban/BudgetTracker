@@ -235,14 +235,24 @@ fun SubscriptionPriceHistoryEntity.toDomain() = SubscriptionPriceHistory(
     id = id,
     subscriptionId = subscriptionId,
     amount = amount,
-    effectiveFromMonth = YearMonth.parse(effectiveFromMonth)
+    effectiveFromMonth = YearMonth.parse(effectiveFromMonth),
+    originalCurrency = originalCurrency,
+    exchangeRateToTry = exchangeRateToTry,
+    exchangeRateScale = exchangeRateScale,
+    exchangeRateSource = exchangeRateSource,
+    exchangeRateUpdatedAt = exchangeRateUpdatedAt
 )
 
 fun SubscriptionPriceHistory.toEntity() = SubscriptionPriceHistoryEntity(
     id = id,
     subscriptionId = subscriptionId,
     amount = amount,
-    effectiveFromMonth = effectiveFromMonth.toString()
+    effectiveFromMonth = effectiveFromMonth.toString(),
+    originalCurrency = originalCurrency,
+    exchangeRateToTry = exchangeRateToTry,
+    exchangeRateScale = exchangeRateScale,
+    exchangeRateSource = exchangeRateSource,
+    exchangeRateUpdatedAt = exchangeRateUpdatedAt
 )
 
 fun LoanEntity.toDomain(category: Category? = null, account: PaymentAccount? = null) = Loan(

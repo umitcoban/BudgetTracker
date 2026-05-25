@@ -18,6 +18,7 @@ Privacy-first, local-only Android budgeting app built with Kotlin, Jetpack Compo
 - Credit card statement and due-date tracking
 - Installment purchase support
 - Subscription tracking with price history and mark-as-paid behavior
+- Subscription price-history currency tracking so currency changes do not alter old prices
 - Loans, debts/receivables, and net worth snapshots
 - Category budgets and monthly reports
 - Cash flow calendar for upcoming financial events
@@ -98,6 +99,8 @@ Release sanity check:
 ```bash
 ./gradlew clean test assembleRelease
 ```
+
+Release builds run with R8/minification and resource shrinking enabled. Android system backup is disabled because the app stores financial data and provides explicit backup/export flows.
 
 ## Important Development Rules
 

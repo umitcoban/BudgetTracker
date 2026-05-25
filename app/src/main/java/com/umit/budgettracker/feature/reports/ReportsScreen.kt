@@ -58,6 +58,12 @@ fun ReportsScreen(
                         ComparisonCard(state.currentMonth, state.previousMonth)
                     }
 
+                    item {
+                        Text(text = "Karar Özeti", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        DecisionSummaryCard(state.currentMonth, state.previousMonth)
+                    }
+
                     if (state.netWorth != null) {
                         item {
                             Text(text = "Net Varlık", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -107,6 +113,51 @@ fun ComparisonCard(current: com.umit.budgettracker.core.domain.model.MonthlyBudg
             Text(
                 text = if (diff > 0) "Geçen aya göre daha fazla harcadınız." else "Geçen aya göre daha az harcadınız.",
                 style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+fun DecisionSummaryCard(
+    current: com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary,
+    previous: com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary
+) {
+    val currentCategories = current.categorySummaries.associateBy { it.categoryId }
+    val topIncrease = currentCategories.values
+        .map { category ->
+            val previousAmount = previous.categorySummaries.firstOrNull { it.categoryId == category.categoryId }?.amount ?: 0L
+            category to (category.amount - previousAmount)
+        }
+        .filter { it.second > 0L }
+        .maxByOrNull { it.second }
+    val fixedPaymentDiff = current.projectedFixedPaymentsAmount - previous.projectedFixedPaymentsAmount
+    val savingGap = current.savingGoalAmount - current.suggestedSavingAmount
+    val cashWarning = current.remainingAfterSavingAndFixedPayments < 0L
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (topIncrease != null) {
+                ReportRow("En Çok Artan Kategori", "${topIncrease.first.categoryName} +${MoneyFormatter.format(topIncrease.second)}", Color.Red, FontWeight.Bold)
+            } else {
+                Text("Kategori artışı dikkat çekmiyor.", style = MaterialTheme.typography.bodySmall)
+            }
+            val diffText = if (fixedPaymentDiff > 0) "+${MoneyFormatter.format(fixedPaymentDiff)}" else MoneyFormatter.format(fixedPaymentDiff)
+            ReportRow("Planlı Ödeme Farkı", diffText, if (fixedPaymentDiff > 0) Color.Red else Color(0xFF4CAF50), FontWeight.Bold)
+            ReportRow(
+                "Birikim Hedefi Sapması",
+                if (savingGap > 0L) "${MoneyFormatter.format(savingGap)} hedef öneriden yüksek" else "Hedef öneriyle uyumlu",
+                if (savingGap > 0L) Color.Red else Color(0xFF4CAF50)
+            )
+            Text(
+                text = if (cashWarning) {
+                    "Kalan nakit negatif. Bu ay hedef, sabit ödemeler veya harcama planı gözden geçirilmeli."
+                } else {
+                    "Kalan nakit pozitif. Bu ay plan sürdürülebilir görünüyor."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (cashWarning) Color.Red else Color(0xFF4CAF50),
+                fontWeight = FontWeight.Bold
             )
         }
     }

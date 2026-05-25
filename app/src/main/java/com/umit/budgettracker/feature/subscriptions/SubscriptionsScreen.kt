@@ -111,8 +111,8 @@ fun SubscriptionsScreen(
                     viewModel.addSubscription(title, amount, bDay, catId, accId, month, currency, rate, rateScale, rateSource, rateUpdatedAt)
                     showDialog = false
                 },
-                onConfirmUpdate = { sub, amount, month ->
-                    viewModel.updateSubscription(sub, amount, month)
+                onConfirmUpdate = { previousSub, updatedSub, amount, month ->
+                    viewModel.updateSubscription(previousSub, updatedSub, amount, month)
                     showDialog = false
                 },
                 onCancelSub = { sub ->
@@ -228,7 +228,7 @@ fun SubscriptionDialog(
     exchangeRateState: SubscriptionExchangeRateUiState,
     onDismiss: () -> Unit,
     onConfirmAdd: (String, Long, Int, Long, Long, YearMonth, String, Long?, Int?, String?, Long?) -> Unit,
-    onConfirmUpdate: (Subscription, Long?, YearMonth?) -> Unit,
+    onConfirmUpdate: (Subscription, Subscription, Long?, YearMonth?) -> Unit,
     onCancelSub: (Subscription) -> Unit,
     onDeactivateSub: (Subscription) -> Unit,
     onDeleteSub: (Subscription) -> Unit,
@@ -259,6 +259,7 @@ fun SubscriptionDialog(
     var categoryExpanded by remember { mutableStateOf(false) }
     var accountExpanded by remember { mutableStateOf(false) }
     var currencyExpanded by remember { mutableStateOf(false) }
+    var previousCurrency by remember { mutableStateOf(selectedCurrency) }
 
     val amount = remember(amountText) { MoneyFormatter.parse(amountText) }
     val exchangeRateToTry = remember(exchangeRateText) { parseRateToScale(exchangeRateText) }
@@ -285,7 +286,14 @@ fun SubscriptionDialog(
     }
 
     LaunchedEffect(selectedCurrency) {
-        if (selectedCurrency == "TRY") {
+        if (selectedCurrency != previousCurrency) {
+            amountText = ""
+            exchangeRateText = ""
+            exchangeRateSource = null
+            exchangeRateUpdatedAt = null
+            onClearExchangeRateState()
+            previousCurrency = selectedCurrency
+        } else if (selectedCurrency == "TRY") {
             exchangeRateText = ""
             exchangeRateSource = null
             exchangeRateUpdatedAt = null
@@ -556,6 +564,7 @@ fun SubscriptionDialog(
                         )
                     } else {
                         onConfirmUpdate(
+                            existingSub,
                             existingSub.copy(
                                 title = title,
                                 billingDay = bDay,

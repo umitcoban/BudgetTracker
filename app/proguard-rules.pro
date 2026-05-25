@@ -19,3 +19,11 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Keep export/import DTOs and services stable for release backup compatibility.
+-keep class com.umit.budgettracker.core.export.** { *; }
+-keep class com.umit.budgettracker.core.dataimport.** { *; }
+
+# Room entity and DAO metadata is part of the local financial data contract.
+-keep class com.umit.budgettracker.core.database.entity.** { *; }
+-keep class com.umit.budgettracker.core.database.dao.** { *; }

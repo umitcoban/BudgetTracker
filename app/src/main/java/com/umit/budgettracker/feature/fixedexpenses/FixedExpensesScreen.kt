@@ -364,6 +364,13 @@ private fun FixedExpenseDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Aktif")
                 }
+                if (existingExpense != null) {
+                    Text(
+                        text = "Bu sabit giderden daha önce harcama oluşturulduysa, o harcamalar değişmeden korunur.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         },
         confirmButton = {

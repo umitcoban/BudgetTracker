@@ -50,7 +50,7 @@ fun SalaryScreen(
     ) { padding ->
         if (rules.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text(text = "Henüz maaş kuralı eklenmemiş.")
+                Text(text = "Henüz maaş kuralı eklenmemiş. Geçmiş aylar için eksik maaş varsa ilgili başlangıç ayıyla yeni kural ekleyin.")
             }
         } else {
             LazyColumn(
@@ -58,6 +58,9 @@ fun SalaryScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                item {
+                    SalaryInfoCard()
+                }
                 items(rules) { rule ->
                     SalaryRuleRow(
                         rule = rule,
@@ -88,6 +91,20 @@ fun SalaryScreen(
                 }
             )
         }
+    }
+}
+
+@Composable
+private fun SalaryInfoCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Text(
+            text = "Eksik geçmiş maaş varsa eski başlangıç ayıyla ayrı kural ekleyin. Yeni zam için eski kuralı taşımayın; zam ayından itibaren yeni kural oluşturun.",
+            modifier = Modifier.padding(12.dp),
+            style = MaterialTheme.typography.bodySmall
+        )
     }
 }
 

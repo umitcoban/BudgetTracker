@@ -28,6 +28,26 @@ interface SubscriptionDao {
     @Query("SELECT * FROM subscription_price_history")
     fun getAllPriceHistory(): Flow<List<SubscriptionPriceHistoryEntity>>
 
+    @Query(
+        """
+        UPDATE subscription_price_history
+        SET originalCurrency = :currency,
+            exchangeRateToTry = :exchangeRateToTry,
+            exchangeRateScale = :exchangeRateScale,
+            exchangeRateSource = :exchangeRateSource,
+            exchangeRateUpdatedAt = :exchangeRateUpdatedAt
+        WHERE subscriptionId = :subscriptionId AND originalCurrency IS NULL
+        """
+    )
+    suspend fun backfillMissingPriceHistoryCurrency(
+        subscriptionId: Long,
+        currency: String,
+        exchangeRateToTry: Long?,
+        exchangeRateScale: Int?,
+        exchangeRateSource: String?,
+        exchangeRateUpdatedAt: Long?
+    )
+
     @Query("DELETE FROM subscription_price_history WHERE subscriptionId = :subscriptionId")
     suspend fun deletePriceHistory(subscriptionId: Long)
 

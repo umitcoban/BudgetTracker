@@ -102,7 +102,17 @@ data class SubscriptionDto(
 )
 
 @Serializable
-data class SubscriptionPriceHistoryDto(val id: Long, val subscriptionId: Long, val amount: Long, val effectiveFromMonth: String)
+data class SubscriptionPriceHistoryDto(
+    val id: Long,
+    val subscriptionId: Long,
+    val amount: Long,
+    val effectiveFromMonth: String,
+    val originalCurrency: String? = null,
+    val exchangeRateToTry: Long? = null,
+    val exchangeRateScale: Int? = null,
+    val exchangeRateSource: String? = null,
+    val exchangeRateUpdatedAt: Long? = null
+)
 
 @Serializable
 data class CategoryBudgetDto(val id: Long, val categoryId: Long, val yearMonth: String, val limitAmount: Long, val note: String?)
