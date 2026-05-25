@@ -37,7 +37,7 @@ BudgetTracker is a local-only personal finance and monthly budgeting app. It is 
 - Hilt: 2.51.1
 - Compose BOM: 2024.05.00
 - Database name: `budget_tracker_db`
-- Room database version: 10
+- Room database version: 11
 - JSON export schema version: 9
 
 ## Non-Negotiable Product Rules
@@ -255,6 +255,29 @@ JSON export/import:
 - Fixed recurring expenses are included in schema version 8.
 - Expense links to processed fixed expenses are included in schema version 9.
 - Replace-mode imports must be confirmed by the user.
+
+## Salary Rule
+
+Salary is stored as effective-month rules, not as a single mutable value.
+
+Rules:
+
+- A salary rule starts from `effectiveStartMonth`.
+- The latest rule whose `effectiveStartMonth <= selectedMonth` is the salary for that month.
+- Adding a future raise must create or update a rule for the raise month.
+- Past months must not change when a future salary rule is added.
+- There must be only one salary rule for the same effective month.
+- If the same effective month is saved again, the existing rule is updated instead of creating a duplicate.
+
+Example:
+
+```text
+2026-05 = 50,000 TL
+2026-08 = 70,000 TL
+
+May, June, July 2026 -> 50,000 TL
+August 2026 and later -> 70,000 TL
+```
 
 ## Income Records Rule
 

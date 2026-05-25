@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.umit.budgettracker.core.domain.model.SalaryRule
 import com.umit.budgettracker.core.util.MoneyFormatter
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.YearMonth
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -26,11 +29,12 @@ fun SalaryScreen(
 ) {
     val rules by viewModel.salaryRules.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
+    var editingRule by remember { mutableStateOf<SalaryRule?>(null) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Maaş Yönetimi") },
+                title = { Text("Maaş Kuralları") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
@@ -40,7 +44,7 @@ fun SalaryScreen(
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Maaş Ekle")
+                Icon(Icons.Default.Add, contentDescription = "Maaş Değişikliği Ekle")
             }
         }
     ) { padding ->
@@ -55,17 +59,32 @@ fun SalaryScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(rules) { rule ->
-                    SalaryRuleRow(rule = rule, onDelete = { viewModel.deleteSalaryRule(rule) })
+                    SalaryRuleRow(
+                        rule = rule,
+                        onEdit = { editingRule = rule },
+                        onDelete = { viewModel.deleteSalaryRule(rule) }
+                    )
                 }
             }
         }
 
         if (showAddDialog) {
-            AddSalaryDialog(
+            SalaryRuleDialog(
+                existingRule = null,
                 onDismiss = { showAddDialog = false },
                 onConfirm = { amount, month, note ->
-                    viewModel.addSalaryRule(amount, month, note)
+                    viewModel.saveSalaryRule(null, amount, month, note)
                     showAddDialog = false
+                }
+            )
+        }
+        editingRule?.let { rule ->
+            SalaryRuleDialog(
+                existingRule = rule,
+                onDismiss = { editingRule = null },
+                onConfirm = { amount, month, note ->
+                    viewModel.saveSalaryRule(rule, amount, month, note)
+                    editingRule = null
                 }
             )
         }
@@ -73,7 +92,7 @@ fun SalaryScreen(
 }
 
 @Composable
-fun SalaryRuleRow(rule: SalaryRule, onDelete: () -> Unit) {
+fun SalaryRuleRow(rule: SalaryRule, onEdit: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -84,10 +103,13 @@ fun SalaryRuleRow(rule: SalaryRule, onDelete: () -> Unit) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = MoneyFormatter.format(rule.amount), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(text = "Başlangıç: ${rule.effectiveStartMonth}", style = MaterialTheme.typography.bodyMedium)
+                Text(text = "${rule.effectiveStartMonth} ayından itibaren geçerli", style = MaterialTheme.typography.bodyMedium)
                 if (!rule.note.isNullOrBlank()) {
                     Text(text = rule.note, style = MaterialTheme.typography.bodySmall)
                 }
+            }
+            IconButton(onClick = onEdit) {
+                Icon(Icons.Default.Edit, contentDescription = "Düzenle")
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, contentDescription = "Sil")
@@ -97,27 +119,44 @@ fun SalaryRuleRow(rule: SalaryRule, onDelete: () -> Unit) {
 }
 
 @Composable
-fun AddSalaryDialog(onDismiss: () -> Unit, onConfirm: (Long, YearMonth, String?) -> Unit) {
-    var amountText by remember { mutableStateOf("") }
-    var monthText by remember { mutableStateOf(YearMonth.now().toString()) }
-    var note by remember { mutableStateOf("") }
+fun SalaryRuleDialog(
+    existingRule: SalaryRule?,
+    onDismiss: () -> Unit,
+    onConfirm: (Long, YearMonth, String?) -> Unit
+) {
+    var amountText by remember { mutableStateOf(existingRule?.amount?.formatMinor().orEmpty()) }
+    var monthText by remember { mutableStateOf(existingRule?.effectiveStartMonth?.toString() ?: YearMonth.now().toString()) }
+    var note by remember { mutableStateOf(existingRule?.note.orEmpty()) }
+    val amount = MoneyFormatter.parse(amountText)
+    val month = runCatching { YearMonth.parse(monthText) }.getOrNull()
+    val isValid = (amount ?: 0L) > 0 && month != null
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Yeni Maaş Kuralı") },
+        title = { Text(if (existingRule == null) "Maaş Değişikliği Ekle" else "Maaş Kuralını Düzenle") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = amountText, onValueChange = { amountText = it }, label = { Text("Miktar (TL)") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = monthText, onValueChange = { monthText = it }, label = { Text("Başlangıç Ayı (YYYY-MM)") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Not (Opsiyonel)") }, modifier = Modifier.fillMaxWidth())
+                Text(
+                    text = if (existingRule == null) {
+                        "Bu tutar seçilen aydan itibaren geçerli olur. Önceki ayların maaşı değişmez."
+                    } else {
+                        "Başlangıç ayını değiştirirsen eski maaş kuralı korunur ve yeni bir kural eklenir."
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                val amount = MoneyFormatter.parse(amountText) ?: 0L
-                val month = try { YearMonth.parse(monthText) } catch (e: Exception) { YearMonth.now() }
-                onConfirm(amount, month, note.ifBlank { null })
-            }) {
+            TextButton(
+                enabled = isValid,
+                onClick = {
+                    onConfirm(amount!!, month!!, note.ifBlank { null })
+                }
+            ) {
                 Text("Kaydet")
             }
         },
@@ -127,4 +166,11 @@ fun AddSalaryDialog(onDismiss: () -> Unit, onConfirm: (Long, YearMonth, String?)
             }
         }
     )
+}
+
+private fun Long.formatMinor(): String {
+    return BigDecimal(this)
+        .divide(BigDecimal(100), 2, RoundingMode.HALF_UP)
+        .stripTrailingZeros()
+        .toPlainString()
 }

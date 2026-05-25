@@ -28,7 +28,7 @@ import com.umit.budgettracker.core.database.entity.*
         IncomeEntity::class,
         FixedExpenseEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

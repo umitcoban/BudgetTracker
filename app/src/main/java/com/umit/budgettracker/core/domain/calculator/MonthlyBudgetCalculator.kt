@@ -63,9 +63,7 @@ class MonthlyBudgetCalculator @Inject constructor(
             loanCalculator.getPaymentsForMonth(month),
             fixedExpenseCalculator.getPaymentsForMonth(month)
         ) { base, subscriptions, loans, fixedExpenses ->
-            val applicableSalary = base.salaryRules
-                .filter { !it.effectiveStartMonth.isAfter(month) }
-                .maxByOrNull { it.effectiveStartMonth }?.amount ?: 0L
+            val applicableSalary = SalaryRules.effectiveForMonth(base.salaryRules, month)?.amount ?: 0L
 
             val calendarMonthExpenses = base.expenses.filter { YearMonth.from(it.expenseDate) == month }
             val plannedMonthExpenses = base.expenses.filter { it.planningMonth() == month }

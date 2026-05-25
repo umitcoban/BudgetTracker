@@ -1,9 +1,13 @@
 package com.umit.budgettracker.core.database.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "salary_rules")
+@Entity(
+    tableName = "salary_rules",
+    indices = [Index(value = ["effectiveStartMonth"], unique = true)]
+)
 data class SalaryRuleEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val amount: Long, // in minor units (kuruş)
