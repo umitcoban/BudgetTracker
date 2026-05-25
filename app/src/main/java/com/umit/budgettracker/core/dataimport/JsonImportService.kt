@@ -39,7 +39,11 @@ class JsonImportService @Inject constructor(
                 db.categoryDao().insertAll(dto.categories.map { it.toEntity() })
                 db.paymentAccountDao().insertAll(dto.paymentAccounts.map { it.toEntity() })
                 db.installmentGroupDao().insertAll(dto.installmentGroups.map { it.toEntity() })
-                db.salaryRuleDao().insertAll(dto.salaryRules.map { it.toEntity() })
+                db.salaryRuleDao().insertAll(
+                    dto.salaryRules
+                        .groupBy { it.effectiveStartMonth }
+                        .map { (_, rules) -> rules.maxBy { it.id }.toEntity() }
+                )
                 if (dto.schemaVersion >= 7) {
                     db.incomeDao().insertAll(dto.incomes.map { it.toEntity() })
                 }

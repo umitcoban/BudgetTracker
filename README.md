@@ -11,6 +11,7 @@ Privacy-first, local-only Android budgeting app built with Kotlin, Jetpack Compo
 ## Features
 
 - Monthly dashboard with salary, additional income, spending, saving goals, savings suggestion, and projections
+- Effective-month salary rules so future raises do not alter historical months
 - Fixed recurring expense tracking for rent, dues, insurance, and similar predictable payments
 - One-tap processing of fixed expenses into real expense records with duplicate prevention
 - Expense tracking with categories and payment accounts

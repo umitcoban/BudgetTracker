@@ -9,6 +9,9 @@ interface SalaryRuleDao {
     @Query("SELECT * FROM salary_rules ORDER BY effectiveStartMonth DESC")
     fun getAll(): Flow<List<SalaryRuleEntity>>
 
+    @Query("SELECT * FROM salary_rules WHERE effectiveStartMonth = :effectiveStartMonth LIMIT 1")
+    suspend fun getByEffectiveStartMonth(effectiveStartMonth: String): SalaryRuleEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(rule: SalaryRuleEntity)
 
