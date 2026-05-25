@@ -35,7 +35,7 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
             .addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
                 super.onCreate(db)
@@ -163,6 +163,30 @@ object DatabaseModule {
             )
             db.execSQL(
                 "CREATE UNIQUE INDEX IF NOT EXISTS `index_salary_rules_effectiveStartMonth` ON `salary_rules` (`effectiveStartMonth`)"
+            )
+        }
+    }
+
+    private val MIGRATION_11_12 = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            addNullableColumnIfMissing(db, "subscription_price_history", "originalCurrency", "TEXT")
+            addNullableColumnIfMissing(db, "subscription_price_history", "exchangeRateToTry", "INTEGER")
+            addNullableColumnIfMissing(db, "subscription_price_history", "exchangeRateScale", "INTEGER")
+            addNullableColumnIfMissing(db, "subscription_price_history", "exchangeRateSource", "TEXT")
+            addNullableColumnIfMissing(db, "subscription_price_history", "exchangeRateUpdatedAt", "INTEGER")
+            db.execSQL(
+                """
+                UPDATE subscription_price_history
+                SET originalCurrency = COALESCE(
+                    (SELECT subscriptions.originalCurrency FROM subscriptions WHERE subscriptions.id = subscription_price_history.subscriptionId),
+                    'TRY'
+                ),
+                exchangeRateToTry = (SELECT subscriptions.exchangeRateToTry FROM subscriptions WHERE subscriptions.id = subscription_price_history.subscriptionId),
+                exchangeRateScale = (SELECT subscriptions.exchangeRateScale FROM subscriptions WHERE subscriptions.id = subscription_price_history.subscriptionId),
+                exchangeRateSource = (SELECT subscriptions.exchangeRateSource FROM subscriptions WHERE subscriptions.id = subscription_price_history.subscriptionId),
+                exchangeRateUpdatedAt = (SELECT subscriptions.exchangeRateUpdatedAt FROM subscriptions WHERE subscriptions.id = subscription_price_history.subscriptionId)
+                WHERE originalCurrency IS NULL
+                """.trimIndent()
             )
         }
     }

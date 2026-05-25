@@ -12,6 +12,7 @@ interface SubscriptionRepository {
     fun observePriceHistory(subscriptionId: Long): Flow<List<SubscriptionPriceHistory>>
     fun observeAllPriceHistory(): Flow<List<SubscriptionPriceHistory>>
     suspend fun upsertSubscription(subscription: Subscription)
+    suspend fun backfillMissingPriceHistoryCurrency(subscription: Subscription)
     suspend fun addPriceHistory(history: SubscriptionPriceHistory)
     suspend fun createSubscriptionWithPrice(subscription: Subscription, initialAmount: Long, startMonth: YearMonth)
     suspend fun deactivateSubscription(id: Long)

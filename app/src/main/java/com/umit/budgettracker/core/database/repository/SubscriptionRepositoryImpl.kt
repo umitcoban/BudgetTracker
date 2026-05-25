@@ -69,6 +69,17 @@ class SubscriptionRepositoryImpl @Inject constructor(
         subscriptionDao.insert(subscription.toEntity())
     }
 
+    override suspend fun backfillMissingPriceHistoryCurrency(subscription: Subscription) {
+        subscriptionDao.backfillMissingPriceHistoryCurrency(
+            subscriptionId = subscription.id,
+            currency = subscription.originalCurrency ?: "TRY",
+            exchangeRateToTry = subscription.exchangeRateToTry,
+            exchangeRateScale = subscription.exchangeRateScale,
+            exchangeRateSource = subscription.exchangeRateSource,
+            exchangeRateUpdatedAt = subscription.exchangeRateUpdatedAt
+        )
+    }
+
     override suspend fun addPriceHistory(history: SubscriptionPriceHistory) {
         subscriptionDao.insertPriceHistory(history.toEntity())
     }
@@ -81,7 +92,12 @@ class SubscriptionRepositoryImpl @Inject constructor(
                     id = 0,
                     subscriptionId = id,
                     amount = initialAmount,
-                    effectiveFromMonth = startMonth
+                    effectiveFromMonth = startMonth,
+                    originalCurrency = subscription.originalCurrency ?: "TRY",
+                    exchangeRateToTry = subscription.exchangeRateToTry,
+                    exchangeRateScale = subscription.exchangeRateScale,
+                    exchangeRateSource = subscription.exchangeRateSource,
+                    exchangeRateUpdatedAt = subscription.exchangeRateUpdatedAt
                 ).toEntity()
             )
         }

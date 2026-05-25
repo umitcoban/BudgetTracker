@@ -37,8 +37,8 @@ BudgetTracker is a local-only personal finance and monthly budgeting app. It is 
 - Hilt: 2.51.1
 - Compose BOM: 2024.05.00
 - Database name: `budget_tracker_db`
-- Room database version: 11
-- JSON export schema version: 9
+- Room database version: 12
+- JSON export schema version: 10
 
 ## Non-Negotiable Product Rules
 
@@ -245,7 +245,7 @@ JSON export/import:
 
 - `appName` must be `BudgetTracker`.
 - Unsupported future schema versions must be rejected.
-- Current JSON schema version is 9.
+- Current JSON schema version is 10.
 - Attachment metadata is included in schema version 2.
 - Credit card statement payment status is included in schema version 3.
 - Expense adjustments/refunds are included in schema version 4.
@@ -254,6 +254,7 @@ JSON export/import:
 - Additional income records are included in schema version 7.
 - Fixed recurring expenses are included in schema version 8.
 - Expense links to processed fixed expenses are included in schema version 9.
+- Subscription price-history currency/rate metadata is included in schema version 10.
 - Replace-mode imports must be confirmed by the user.
 
 ## Salary Rule
@@ -390,7 +391,7 @@ Rules:
 
 Primary reporting currency remains TRY.
 
-Subscriptions may store nullable currency metadata:
+Subscriptions may store nullable current/default currency metadata:
 
 ```text
 originalCurrency
@@ -400,9 +401,31 @@ exchangeRateSource
 exchangeRateUpdatedAt
 ```
 
-For TRY subscriptions, `SubscriptionPriceHistory.amount` is interpreted as TRY minor units.
+Subscription price history also stores currency/rate metadata:
 
-For foreign-currency subscriptions, `SubscriptionPriceHistory.amount` is interpreted as the original currency minor-unit amount. Monthly subscription calculations should convert it to TRY using the latest available exchange rate. If live rate lookup fails, fall back to the stored/manual rate on the subscription. Existing TRY subscriptions must remain valid without any currency metadata.
+```text
+originalCurrency
+exchangeRateToTry
+exchangeRateScale
+exchangeRateSource
+exchangeRateUpdatedAt
+```
+
+For TRY subscription price-history rows, `SubscriptionPriceHistory.amount` is interpreted as TRY minor units.
+
+For foreign-currency price-history rows, `SubscriptionPriceHistory.amount` is interpreted as the original currency minor-unit amount. Monthly subscription calculations should convert it to TRY using the latest available exchange rate. If live rate lookup fails, fall back to the stored/manual rate on the price history, then the subscription.
+
+Currency changes must not reinterpret historical prices. Example:
+
+```text
+May 2026 subscription price = 500 TL
+July 2026 subscription price = 8 EUR
+
+May and June remain 500 TL.
+July and later use 8 EUR converted to TRY.
+```
+
+When editing an existing subscription and changing currency, the old amount field should be cleared so an old TRY amount is not accidentally saved as USD/EUR.
 
 When a foreign-currency subscription payment is processed into expenses, the created expense should keep:
 
@@ -526,12 +549,23 @@ Use proper Turkish characters in UI strings when editing existing Turkish UI fil
 
 These items are known risks or production-hardening targets based on the current codebase:
 
-- `AndroidManifest.xml` currently has `android:allowBackup="true"`. For a privacy-first finance app, production should intentionally decide this and likely use `false`.
+- `AndroidManifest.xml` uses `android:allowBackup="false"` for the privacy-first finance model.
 - Room schema export is enabled and schema files should be committed when database versions change.
 - Destructive migration fallback is intentionally disabled. New schema changes must provide explicit migrations.
-- Release build currently has `isMinifyEnabled = false`; production release should test R8/minification and resource shrinking.
-- Export/import, full ZIP backup, Room, and Kotlinx Serialization must be tested after minification.
+- Release build has R8/minification and resource shrinking enabled.
+- Export/import DTOs and Room entities/DAOs have minimal ProGuard keep rules.
+- Export/import, full ZIP backup, Room, and Kotlinx Serialization should still be manually tested on the generated minified release APK before relying on it for long-term data.
 - Signing config should use Gradle properties or local files, never hardcoded secrets.
+
+## Data Integrity Regression Tests
+
+Current focused regression coverage includes:
+
+- Fixed expense processing prevents duplicate monthly planned fixed-payment totals.
+- Credit-card expenses after statement day move to the next planning/payment month.
+- Foreign-currency subscription price history keeps historical TRY prices when future prices switch to EUR/USD.
+- Foreign-currency subscription payments preserve original amount, currency, and rate metadata when processed into expenses.
+- Old JSON export shapes without newly added nullable fields decode with safe defaults.
 
 ## Verification Commands
 

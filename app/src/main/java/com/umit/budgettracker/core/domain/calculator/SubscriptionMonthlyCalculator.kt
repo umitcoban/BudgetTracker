@@ -32,15 +32,16 @@ class SubscriptionMonthlyCalculator @Inject constructor(
                 SubscriptionRules.contributesToMonth(sub, histories, month)
             }.map { sub ->
                 val isPaid = expenses.any { it.subscriptionId == sub.id }
-                val originalAmount = SubscriptionRules.priceForMonth(sub.id, histories, month) ?: 0L
-                val currency = sub.originalCurrency ?: "TRY"
+                val price = SubscriptionRules.priceEntryForMonth(sub.id, histories, month)
+                val originalAmount = price?.amount ?: 0L
+                val currency = price?.originalCurrency ?: sub.originalCurrency ?: "TRY"
                 val latestRate = if (currency == "TRY") {
                     null
                 } else {
                     exchangeRateService.fetchRateToTry(currency).getOrNull()
                 }
-                val rateToTry = latestRate?.rateToTry ?: sub.exchangeRateToTry
-                val rateScale = latestRate?.rateScale ?: sub.exchangeRateScale
+                val rateToTry = latestRate?.rateToTry ?: price?.exchangeRateToTry ?: sub.exchangeRateToTry
+                val rateScale = latestRate?.rateScale ?: price?.exchangeRateScale ?: sub.exchangeRateScale
                 val amount = if (currency == "TRY") {
                     originalAmount
                 } else {
@@ -55,8 +56,8 @@ class SubscriptionMonthlyCalculator @Inject constructor(
                     originalCurrency = currency.takeIf { it != "TRY" },
                     exchangeRateToTry = rateToTry.takeIf { currency != "TRY" },
                     exchangeRateScale = rateScale.takeIf { currency != "TRY" },
-                    exchangeRateSource = latestRate?.source ?: sub.exchangeRateSource,
-                    exchangeRateUpdatedAt = System.currentTimeMillis().takeIf { latestRate != null } ?: sub.exchangeRateUpdatedAt,
+                    exchangeRateSource = latestRate?.source ?: price?.exchangeRateSource ?: sub.exchangeRateSource,
+                    exchangeRateUpdatedAt = System.currentTimeMillis().takeIf { latestRate != null } ?: price?.exchangeRateUpdatedAt ?: sub.exchangeRateUpdatedAt,
                     billingDay = sub.billingDay,
                     categoryId = sub.categoryId,
                     paymentAccountId = sub.paymentAccountId,

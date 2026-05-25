@@ -120,6 +120,7 @@ class SyncDueSubscriptionExpensesUseCaseTest {
         }
         override fun observeAllPriceHistory(): Flow<List<SubscriptionPriceHistory>> = histories
         override suspend fun upsertSubscription(subscription: Subscription) = Unit
+        override suspend fun backfillMissingPriceHistoryCurrency(subscription: Subscription) = Unit
         override suspend fun addPriceHistory(history: SubscriptionPriceHistory) = Unit
         override suspend fun createSubscriptionWithPrice(subscription: Subscription, initialAmount: Long, startMonth: YearMonth) = Unit
         override suspend fun deactivateSubscription(id: Long) = Unit

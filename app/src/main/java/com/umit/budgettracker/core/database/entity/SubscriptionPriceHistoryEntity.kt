@@ -9,5 +9,10 @@ data class SubscriptionPriceHistoryEntity(
     val subscriptionId: Long,
     val amount: Long,
     val effectiveFromMonth: String, // "YYYY-MM"
+    val originalCurrency: String? = null,
+    val exchangeRateToTry: Long? = null,
+    val exchangeRateScale: Int? = null,
+    val exchangeRateSource: String? = null,
+    val exchangeRateUpdatedAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis()
 )
