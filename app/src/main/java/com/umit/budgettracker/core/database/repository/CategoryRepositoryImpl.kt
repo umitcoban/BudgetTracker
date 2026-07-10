@@ -25,7 +25,11 @@ class CategoryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun upsertCategory(category: Category) {
-        dao.insert(category.toEntity())
+        if (category.id == 0L) {
+            dao.insert(category.toEntity())
+        } else {
+            dao.update(category.toEntity())
+        }
     }
 
     override suspend fun deleteCategory(category: Category) {

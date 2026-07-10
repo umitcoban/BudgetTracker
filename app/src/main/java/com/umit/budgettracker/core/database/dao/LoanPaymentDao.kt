@@ -18,6 +18,9 @@ interface LoanPaymentDao {
     @Query("SELECT * FROM loan_payments WHERE loanId = :loanId AND paymentMonth = :paymentMonth LIMIT 1")
     suspend fun getByLoanAndMonth(loanId: Long, paymentMonth: String): LoanPaymentEntity?
 
+    @Query("SELECT COUNT(*) FROM loan_payments WHERE loanId = :loanId")
+    suspend fun countByLoanId(loanId: Long): Int
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(payment: LoanPaymentEntity)
 

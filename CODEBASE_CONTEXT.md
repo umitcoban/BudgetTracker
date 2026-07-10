@@ -328,6 +328,10 @@ Rules:
 - Existing loans retain their stored monthly-payment values until the user edits the record.
 - A loan payment is recorded once per loan and payment month. Marking a payment as paid removes only that month's planned loan payment; it must not delete historical payment records.
 
+## Local Reminder Rule
+
+Local payment reminders are scheduled on-device for 09:00. The alarm must be re-scheduled when the device finishes booting, and notification permission must be requested transparently on Android 13 and later.
+
 ## Fixed Expense and Savings Suggestion Rule
 
 Fixed expenses are recurring predictable payments that are not subscriptions and do not need subscription price history, cancellation, or mark-as-paid behavior.
@@ -528,6 +532,7 @@ Rules:
 - Inactive categories should not appear in new expense/category selectors.
 - Old expenses should continue to show their category.
 - Duplicate category names should be blocked or warned.
+- Updating an existing category must use Room `@Update`, not `INSERT OR REPLACE`; categories can be referenced by historical expenses and `REPLACE` may trigger a foreign-key-restricted delete.
 
 ### Monthly Category Summary Rule
 

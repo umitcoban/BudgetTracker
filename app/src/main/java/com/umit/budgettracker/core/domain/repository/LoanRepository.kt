@@ -16,5 +16,6 @@ interface LoanRepository {
 enum class LoanDeletionResult {
     Deleted,
     HasLinkedExpenses,
+    HasPaymentHistory,
     NotFound
 }

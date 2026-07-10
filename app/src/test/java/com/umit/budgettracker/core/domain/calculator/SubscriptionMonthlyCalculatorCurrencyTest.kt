@@ -104,6 +104,7 @@ class SubscriptionMonthlyCalculatorCurrencyTest {
     }
 
     private class FakePaymentAccountRepository : PaymentAccountRepository {
+        override fun observeAllAccounts(): Flow<List<PaymentAccount>> = observeActiveAccounts()
         override fun observeActiveAccounts(): Flow<List<PaymentAccount>> {
             return flowOf(listOf(PaymentAccount(1L, "Banka", AccountType.BANK_ACCOUNT, null, null, true)))
         }

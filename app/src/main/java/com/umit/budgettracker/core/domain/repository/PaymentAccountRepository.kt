@@ -4,6 +4,7 @@ import com.umit.budgettracker.core.domain.model.PaymentAccount
 import kotlinx.coroutines.flow.Flow
 
 interface PaymentAccountRepository {
+    fun observeAllAccounts(): Flow<List<PaymentAccount>>
     fun observeActiveAccounts(): Flow<List<PaymentAccount>>
     suspend fun getAccountById(id: Long): PaymentAccount?
 }

@@ -153,6 +153,7 @@ class SyncDueSubscriptionExpensesUseCaseTest {
     }
 
     private class FakePaymentAccountRepository : PaymentAccountRepository {
+        override fun observeAllAccounts(): Flow<List<PaymentAccount>> = flowOf(emptyList())
         override fun observeActiveAccounts(): Flow<List<PaymentAccount>> = flowOf(emptyList())
         override suspend fun getAccountById(id: Long): PaymentAccount {
             return PaymentAccount(id = id, name = "Banka", type = AccountType.BANK_ACCOUNT, statementDay = null, dueDay = null, isActive = true)

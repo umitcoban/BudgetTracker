@@ -16,14 +16,12 @@ class ExpenseTemplateRepositoryImpl @Inject constructor(
     private val categoryDao: CategoryDao,
     private val accountDao: PaymentAccountDao
 ) : ExpenseTemplateRepository {
+    override fun observeAllTemplates(): Flow<List<ExpenseTemplate>> {
+        return templateDao.getAll().map { entities -> entities.map { entity -> toDomain(entity) } }
+    }
+
     override fun observeActiveTemplates(): Flow<List<ExpenseTemplate>> {
-        return templateDao.getAllActive().map { entities ->
-            entities.map { entity ->
-                val category = categoryDao.getById(entity.categoryId)?.toDomain()
-                val account = entity.paymentAccountId?.let { accountDao.getById(it)?.toDomain() }
-                entity.toDomain(category, account)
-            }
-        }
+        return templateDao.getAllActive().map { entities -> entities.map { entity -> toDomain(entity) } }
     }
 
     override suspend fun upsertTemplate(template: ExpenseTemplate) {
@@ -34,5 +32,13 @@ class ExpenseTemplateRepositoryImpl @Inject constructor(
         templateDao.getById(id)?.let {
             templateDao.delete(it)
         }
+    }
+
+    private suspend fun toDomain(
+        entity: com.umit.budgettracker.core.database.entity.ExpenseTemplateEntity
+    ): ExpenseTemplate {
+        val category = categoryDao.getById(entity.categoryId)?.toDomain()
+        val account = entity.paymentAccountId?.let { accountDao.getById(it)?.toDomain() }
+        return entity.toDomain(category, account)
     }
 }
