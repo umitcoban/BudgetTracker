@@ -11,6 +11,10 @@ import javax.inject.Inject
 class PaymentAccountRepositoryImpl @Inject constructor(
     private val dao: PaymentAccountDao
 ) : PaymentAccountRepository {
+    override fun observeAllAccounts(): Flow<List<PaymentAccount>> {
+        return dao.getAll().map { entities -> entities.map { it.toDomain() } }
+    }
+
     override fun observeActiveAccounts(): Flow<List<PaymentAccount>> {
         return dao.getAllActive().map { entities -> entities.map { it.toDomain() } }
     }

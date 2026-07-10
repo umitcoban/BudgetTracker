@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.umit.budgettracker.core.domain.calculator.LoanPaymentCalculator
 import com.umit.budgettracker.core.domain.model.Loan
+import com.umit.budgettracker.core.domain.model.LoanPayment
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
 import java.time.YearMonth
@@ -61,6 +62,7 @@ fun LoansScreen(
     val loans by viewModel.loans.collectAsState()
     val selectedMonth by viewModel.selectedMonth.collectAsState()
     val paidLoanIds by viewModel.paidLoanIds.collectAsState()
+    val paymentsByLoanId by viewModel.paymentsByLoanId.collectAsState()
     val message by viewModel.message.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var editingLoan by remember { mutableStateOf<Loan?>(null) }
@@ -127,6 +129,7 @@ fun LoansScreen(
                         },
                         selectedMonth = selectedMonth,
                         isPaidForSelectedMonth = loan.id in paidLoanIds,
+                        payments = paymentsByLoanId[loan.id].orEmpty(),
                         onMarkPaymentAsPaid = { viewModel.markPaymentAsPaid(loan) },
                         onCloseEarly = { loanToClose = loan },
                         onDelete = { loanToDelete = loan }
@@ -204,6 +207,7 @@ private fun LoanRow(
     onEdit: () -> Unit,
     selectedMonth: YearMonth,
     isPaidForSelectedMonth: Boolean,
+    payments: List<LoanPayment>,
     onMarkPaymentAsPaid: () -> Unit,
     onCloseEarly: () -> Unit,
     onDelete: () -> Unit
@@ -270,6 +274,27 @@ private fun LoanRow(
                         Icon(Icons.Default.CheckCircle, contentDescription = null)
                         Text("Erken Kapat", modifier = Modifier.padding(start = 8.dp))
                     }
+                }
+            }
+            if (payments.isNotEmpty()) {
+                Text(
+                    text = "İşlenen ödemeler",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                payments.take(3).forEach { payment ->
+                    Text(
+                        text = "${payment.paymentMonth}: ${MoneyFormatter.format(payment.amount)} • ${payment.paidAt.format(closeDateFormatter)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (payments.size > 3) {
+                    Text(
+                        text = "+${payments.size - 3} eski ödeme",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

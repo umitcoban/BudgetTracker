@@ -223,6 +223,7 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
     }
 
     private class FakePaymentAccountRepository : PaymentAccountRepository {
+        override fun observeAllAccounts(): Flow<List<PaymentAccount>> = flowOf(emptyList())
         override fun observeActiveAccounts(): Flow<List<PaymentAccount>> = flowOf(emptyList())
         override suspend fun getAccountById(id: Long): PaymentAccount? = null
     }

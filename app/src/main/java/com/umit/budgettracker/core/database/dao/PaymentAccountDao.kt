@@ -6,6 +6,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PaymentAccountDao {
+    @Query("SELECT * FROM payment_accounts")
+    fun getAll(): Flow<List<PaymentAccountEntity>>
+
     @Query("SELECT * FROM payment_accounts WHERE isActive = 1")
     fun getAllActive(): Flow<List<PaymentAccountEntity>>
 

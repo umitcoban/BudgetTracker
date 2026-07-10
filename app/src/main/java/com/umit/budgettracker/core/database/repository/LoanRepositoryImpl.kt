@@ -3,6 +3,7 @@ package com.umit.budgettracker.core.database.repository
 import com.umit.budgettracker.core.database.dao.CategoryDao
 import com.umit.budgettracker.core.database.dao.ExpenseDao
 import com.umit.budgettracker.core.database.dao.LoanDao
+import com.umit.budgettracker.core.database.dao.LoanPaymentDao
 import com.umit.budgettracker.core.database.dao.PaymentAccountDao
 import com.umit.budgettracker.core.database.mapper.toDomain
 import com.umit.budgettracker.core.database.mapper.toEntity
@@ -17,6 +18,7 @@ import javax.inject.Inject
 class LoanRepositoryImpl @Inject constructor(
     private val loanDao: LoanDao,
     private val expenseDao: ExpenseDao,
+    private val loanPaymentDao: LoanPaymentDao,
     private val categoryDao: CategoryDao,
     private val accountDao: PaymentAccountDao
 ) : LoanRepository {
@@ -66,6 +68,7 @@ class LoanRepositoryImpl @Inject constructor(
     override suspend fun deleteLoan(id: Long): LoanDeletionResult {
         val loan = loanDao.getById(id) ?: return LoanDeletionResult.NotFound
         if (expenseDao.countByLoanId(id) > 0) return LoanDeletionResult.HasLinkedExpenses
+        if (loanPaymentDao.countByLoanId(id) > 0) return LoanDeletionResult.HasPaymentHistory
 
         loanDao.delete(loan)
         return LoanDeletionResult.Deleted

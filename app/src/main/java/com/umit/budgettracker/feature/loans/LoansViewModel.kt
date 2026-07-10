@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.umit.budgettracker.core.domain.calculator.LoanPaymentCalculator
 import com.umit.budgettracker.core.domain.model.Loan
+import com.umit.budgettracker.core.domain.model.LoanPayment
 import com.umit.budgettracker.core.domain.repository.LoanPaymentRepository
 import com.umit.budgettracker.core.domain.repository.LoanDeletionResult
 import com.umit.budgettracker.core.domain.repository.LoanRepository
@@ -35,6 +36,11 @@ class LoansViewModel @Inject constructor(
         .flatMapLatest { month -> loanPaymentRepository.observePaymentsForMonth(month) }
         .map { payments -> payments.map { it.loanId }.toSet() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    val paymentsByLoanId: StateFlow<Map<Long, List<LoanPayment>>> = loanPaymentRepository
+        .observeAllPayments()
+        .map { payments -> payments.groupBy { it.loanId } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
@@ -84,6 +90,7 @@ class LoansViewModel @Inject constructor(
             _message.value = when (repository.deleteLoan(loan.id)) {
                 LoanDeletionResult.Deleted -> "Kredi silindi."
                 LoanDeletionResult.HasLinkedExpenses -> "Bu krediye bağlı harcamalar olduğu için silinemez. Krediyi erken kapatabilirsiniz."
+                LoanDeletionResult.HasPaymentHistory -> "Bu kredinin ödeme geçmişi olduğu için silinemez."
                 LoanDeletionResult.NotFound -> "Kredi bulunamadı."
             }
         }

@@ -6,6 +6,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ExpenseTemplateDao {
+    @Query("SELECT * FROM expense_templates")
+    fun getAll(): Flow<List<ExpenseTemplateEntity>>
+
     @Query("SELECT * FROM expense_templates WHERE isActive = 1")
     fun getAllActive(): Flow<List<ExpenseTemplateEntity>>
 

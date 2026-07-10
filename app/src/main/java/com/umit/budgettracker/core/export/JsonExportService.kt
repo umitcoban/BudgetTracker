@@ -64,7 +64,7 @@ class JsonExportService @Inject constructor(
                 categories = categoryRepository.observeAllCategories().first().map { 
                     CategoryDto(it.id, it.name, it.iconName, it.colorValue, it.type.name, it.isDefault, it.isActive, it.sortOrder) 
                 },
-                paymentAccounts = accountRepository.observeActiveAccounts().first().map { 
+                paymentAccounts = accountRepository.observeAllAccounts().first().map {
                     PaymentAccountDto(it.id, it.name, it.type.name, it.statementDay, it.dueDay, it.isActive) 
                 },
                 expenses = expenseRepository.observeAllExpenses().first().map { 
@@ -131,7 +131,7 @@ class JsonExportService @Inject constructor(
                 categoryBudgets = budgetRepository.observeAllBudgets().first().map { 
                     CategoryBudgetDto(it.id, it.categoryId, it.yearMonth.toString(), it.limitAmount, it.note) 
                 },
-                expenseTemplates = templateRepository.observeActiveTemplates().first().map { 
+                expenseTemplates = templateRepository.observeAllTemplates().first().map {
                     ExpenseTemplateDto(it.id, it.title, it.defaultAmount, it.categoryId, it.paymentAccountId, it.note, it.isActive) 
                 },
                 debtRecords = debtRepository.observeAllDebtRecords().first().map { 
