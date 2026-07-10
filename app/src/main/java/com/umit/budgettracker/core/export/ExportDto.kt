@@ -82,7 +82,20 @@ data class ExpenseDto(
 data class InstallmentGroupDto(val id: Long, val title: String, val totalAmount: Long, val installmentCount: Int, val startDate: Long, val categoryId: Long, val paymentAccountId: Long, val note: String?)
 
 @Serializable
-data class LoanDto(val id: Long, val title: String, val principalAmount: Long, val monthlyPaymentAmount: Long, val installmentCount: Int, val startMonth: String, val paymentDay: Int, val categoryId: Long?, val paymentAccountId: Long?, val note: String?, val isActive: Boolean)
+data class LoanDto(
+    val id: Long,
+    val title: String,
+    val principalAmount: Long,
+    val monthlyPaymentAmount: Long,
+    val installmentCount: Int,
+    val startMonth: String,
+    val paymentDay: Int,
+    val categoryId: Long?,
+    val paymentAccountId: Long?,
+    val note: String?,
+    val isActive: Boolean,
+    val closedAt: Long? = null
+)
 
 @Serializable
 data class SubscriptionDto(

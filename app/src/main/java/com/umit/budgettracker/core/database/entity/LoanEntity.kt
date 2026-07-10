@@ -16,6 +16,7 @@ data class LoanEntity(
     val paymentAccountId: Long? = null,
     val note: String? = null,
     val isActive: Boolean = true,
+    val closedAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

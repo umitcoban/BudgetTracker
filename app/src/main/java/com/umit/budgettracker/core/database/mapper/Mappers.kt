@@ -267,6 +267,7 @@ fun LoanEntity.toDomain(category: Category? = null, account: PaymentAccount? = n
     paymentAccountId = paymentAccountId,
     note = note,
     isActive = isActive,
+    closedAt = closedAt?.let(LocalDate::ofEpochDay),
     category = category,
     account = account
 )
@@ -282,7 +283,8 @@ fun Loan.toEntity() = LoanEntity(
     categoryId = categoryId,
     paymentAccountId = paymentAccountId,
     note = note,
-    isActive = isActive
+    isActive = isActive,
+    closedAt = closedAt?.toEpochDay()
 )
 
 fun CategoryBudgetEntity.toDomain(category: Category? = null) = CategoryBudget(

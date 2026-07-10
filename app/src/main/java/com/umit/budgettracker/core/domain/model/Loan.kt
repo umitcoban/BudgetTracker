@@ -1,5 +1,6 @@
 package com.umit.budgettracker.core.domain.model
 
+import java.time.LocalDate
 import java.time.YearMonth
 
 data class Loan(
@@ -14,6 +15,7 @@ data class Loan(
     val paymentAccountId: Long?,
     val note: String?,
     val isActive: Boolean,
+    val closedAt: LocalDate? = null,
     val category: Category? = null,
     val account: PaymentAccount? = null
 )

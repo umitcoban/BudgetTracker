@@ -29,6 +29,9 @@ interface ExpenseDao {
     @Query("SELECT COUNT(*) FROM expenses WHERE subscriptionId = :subscriptionId")
     suspend fun countBySubscriptionId(subscriptionId: Long): Int
 
+    @Query("SELECT COUNT(*) FROM expenses WHERE loanId = :loanId")
+    suspend fun countByLoanId(loanId: Long): Int
+
     @Query("SELECT COUNT(*) FROM expenses WHERE fixedExpenseId = :fixedExpenseId AND expenseDate BETWEEN :startDate AND :endDate")
     suspend fun countFixedExpenseExpensesForPeriod(fixedExpenseId: Long, startDate: Long, endDate: Long): Int
 
