@@ -47,6 +47,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.umit.budgettracker.core.domain.calculator.LoanPaymentCalculator
 import com.umit.budgettracker.core.domain.model.Loan
 import com.umit.budgettracker.core.util.MoneyFormatter
+import com.umit.budgettracker.feature.dashboard.MonthSelector
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -58,6 +59,8 @@ fun LoansScreen(
     viewModel: LoansViewModel = hiltViewModel()
 ) {
     val loans by viewModel.loans.collectAsState()
+    val selectedMonth by viewModel.selectedMonth.collectAsState()
+    val paidLoanIds by viewModel.paidLoanIds.collectAsState()
     val message by viewModel.message.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var editingLoan by remember { mutableStateOf<Loan?>(null) }
@@ -80,6 +83,13 @@ fun LoansScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
                     }
+                },
+                actions = {
+                    MonthSelector(
+                        selectedMonth = selectedMonth,
+                        onMonthChange = viewModel::previousMonth,
+                        onNextMonth = viewModel::nextMonth
+                    )
                 }
             )
         },
@@ -115,6 +125,9 @@ fun LoansScreen(
                             editingLoan = loan
                             showLoanDialog = true
                         },
+                        selectedMonth = selectedMonth,
+                        isPaidForSelectedMonth = loan.id in paidLoanIds,
+                        onMarkPaymentAsPaid = { viewModel.markPaymentAsPaid(loan) },
                         onCloseEarly = { loanToClose = loan },
                         onDelete = { loanToDelete = loan }
                     )
@@ -189,6 +202,9 @@ fun LoansScreen(
 private fun LoanRow(
     loan: Loan,
     onEdit: () -> Unit,
+    selectedMonth: YearMonth,
+    isPaidForSelectedMonth: Boolean,
+    onMarkPaymentAsPaid: () -> Unit,
     onCloseEarly: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -234,9 +250,26 @@ private fun LoanRow(
                 }
             }
             if (loan.isActive) {
-                Button(onClick = onCloseEarly, modifier = Modifier.align(Alignment.End)) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null)
-                    Text("Erken Kapat", modifier = Modifier.padding(start = 8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    if (isPaidForSelectedMonth) {
+                        Text(
+                            text = "${selectedMonth} ödemesi yapıldı",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.align(Alignment.CenterVertically)
+                        )
+                    } else {
+                        TextButton(onClick = onMarkPaymentAsPaid) {
+                            Text("${selectedMonth} ödemesini işaretle")
+                        }
+                    }
+                    Button(onClick = onCloseEarly, modifier = Modifier.padding(start = 8.dp)) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null)
+                        Text("Erken Kapat", modifier = Modifier.padding(start = 8.dp))
+                    }
                 }
             }
         }

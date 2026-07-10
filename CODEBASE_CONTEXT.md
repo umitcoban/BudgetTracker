@@ -37,8 +37,8 @@ BudgetTracker is a local-only personal finance and monthly budgeting app. It is 
 - Hilt: 2.51.1
 - Compose BOM: 2024.05.00
 - Database name: `budget_tracker_db`
-- Room database version: 13
-- JSON export schema version: 11
+- Room database version: 14
+- JSON export schema version: 12
 
 ## Non-Negotiable Product Rules
 
@@ -256,6 +256,7 @@ JSON export/import:
 - Expense links to processed fixed expenses are included in schema version 9.
 - Subscription price-history currency/rate metadata is included in schema version 10.
 - Loan early-close date is included in schema version 11.
+- Loan payment records are included in schema version 12.
 - Replace-mode imports must be confirmed by the user.
 
 ## Salary Rule
@@ -325,6 +326,7 @@ Rules:
 - The calculation must use `Long` minor units and integer arithmetic; do not use `Double`.
 - The UI may show the calculated amount as a read-only preview, but the ViewModel or domain calculator must calculate it again before saving.
 - Existing loans retain their stored monthly-payment values until the user edits the record.
+- A loan payment is recorded once per loan and payment month. Marking a payment as paid removes only that month's planned loan payment; it must not delete historical payment records.
 
 ## Fixed Expense and Savings Suggestion Rule
 
@@ -526,6 +528,18 @@ Rules:
 - Inactive categories should not appear in new expense/category selectors.
 - Old expenses should continue to show their category.
 - Duplicate category names should be blocked or warned.
+
+### Monthly Category Summary Rule
+
+Monthly category summaries must be built from every expense in the selected planning month, not only from categories with a defined category budget.
+
+Rules:
+
+- A category with spending and no budget must still appear in Dashboard and Reports.
+- A category with a budget but no spending must also remain visible with a zero amount.
+- Credit-card expenses must use their planning/payment month, consistent with the rest of the monthly summary.
+- Refund adjustments must reduce the displayed category amount; the amount must not drop below zero.
+- When a category budget exists, show both the spending amount and the budget usage percentage.
 
 ## Duplicate Prevention Rules
 

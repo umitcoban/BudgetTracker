@@ -46,6 +46,10 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun bindLoanPaymentRepository(impl: LoanPaymentRepositoryImpl): LoanPaymentRepository
+
+    @Binds
+    @Singleton
     abstract fun bindCategoryBudgetRepository(impl: CategoryBudgetRepositoryImpl): CategoryBudgetRepository
 
     @Binds

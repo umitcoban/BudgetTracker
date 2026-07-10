@@ -48,12 +48,16 @@ fun ExpenseScreen(
     navController: NavController,
     viewModel: ExpensesViewModel = hiltViewModel()
 ) {
-    val expenses by viewModel.expenses.collectAsState()
+    val expenses by viewModel.filteredExpenses.collectAsState()
     val selectedMonth by viewModel.selectedMonth.collectAsState()
+    val filter by viewModel.filter.collectAsState()
+    val categories by viewModel.categories.collectAsState()
+    val accounts by viewModel.accounts.collectAsState()
     val exchangeRateState by viewModel.exchangeRateState.collectAsState()
     
     var showDialog by remember { mutableStateOf(false) }
     var editingExpense by remember { mutableStateOf<Expense?>(null) }
+    var showFilterDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -62,6 +66,15 @@ fun ExpenseScreen(
                 actions = {
                     IconButton(onClick = { navController.navigate(Screen.ExpenseTemplates.route) }) {
                         Icon(Icons.Default.ContentPaste, contentDescription = "Şablonlar")
+                    }
+                    BadgedBox(badge = {
+                        if (filter.isActive) {
+                            Badge()
+                        }
+                    }) {
+                        IconButton(onClick = { showFilterDialog = true }) {
+                            Icon(Icons.Default.FilterList, contentDescription = "Filtrele")
+                        }
                     }
                     MonthSelector(
                         selectedMonth = selectedMonth,
@@ -120,8 +133,8 @@ fun ExpenseScreen(
                     viewModel.addInstallmentPurchase(group, list)
                     showDialog = false
                 },
-                categories = viewModel.categories.collectAsState().value,
-                accounts = viewModel.accounts.collectAsState().value,
+                categories = categories,
+                accounts = accounts,
                 exchangeRateState = exchangeRateState,
                 onFetchExchangeRate = { viewModel.fetchExchangeRate(it) },
                 onClearExchangeRateState = { viewModel.clearExchangeRateState() },
@@ -137,7 +150,94 @@ fun ExpenseScreen(
                 onDeleteAdjustment = { viewModel.deleteAdjustment(it) }
             )
         }
+
+        if (showFilterDialog) {
+            ExpenseFilterDialog(
+                initialFilter = filter,
+                categories = categories,
+                accounts = accounts,
+                onDismiss = { showFilterDialog = false },
+                onApply = {
+                    viewModel.updateFilter(it)
+                    showFilterDialog = false
+                },
+                onClear = {
+                    viewModel.clearFilter()
+                    showFilterDialog = false
+                }
+            )
+        }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExpenseFilterDialog(
+    initialFilter: ExpenseFilter,
+    categories: List<Category>,
+    accounts: List<PaymentAccount>,
+    onDismiss: () -> Unit,
+    onApply: (ExpenseFilter) -> Unit,
+    onClear: () -> Unit
+) {
+    var query by remember(initialFilter) { mutableStateOf(initialFilter.query) }
+    var selectedCategoryId by remember(initialFilter) { mutableStateOf(initialFilter.categoryId) }
+    var selectedAccountId by remember(initialFilter) { mutableStateOf(initialFilter.accountId) }
+    var minimumText by remember(initialFilter) { mutableStateOf(initialFilter.minimumAmount?.formatMinor().orEmpty()) }
+    var maximumText by remember(initialFilter) { mutableStateOf(initialFilter.maximumAmount?.formatMinor().orEmpty()) }
+    var categoryExpanded by remember { mutableStateOf(false) }
+    var accountExpanded by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Harcamaları Filtrele") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(query, { query = it }, label = { Text("Başlık, not, kategori veya hesap") }, modifier = Modifier.fillMaxWidth())
+                ExposedDropdownMenuBox(categoryExpanded, { categoryExpanded = !categoryExpanded }) {
+                    OutlinedTextField(
+                        value = categories.firstOrNull { it.id == selectedCategoryId }?.name ?: "Tüm kategoriler",
+                        onValueChange = {}, readOnly = true, label = { Text("Kategori") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(categoryExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(categoryExpanded, { categoryExpanded = false }) {
+                        DropdownMenuItem(text = { Text("Tüm kategoriler") }, onClick = { selectedCategoryId = null; categoryExpanded = false })
+                        categories.forEach { category ->
+                            DropdownMenuItem(text = { Text(category.name) }, onClick = { selectedCategoryId = category.id; categoryExpanded = false })
+                        }
+                    }
+                }
+                ExposedDropdownMenuBox(accountExpanded, { accountExpanded = !accountExpanded }) {
+                    OutlinedTextField(
+                        value = accounts.firstOrNull { it.id == selectedAccountId }?.name ?: "Tüm hesaplar",
+                        onValueChange = {}, readOnly = true, label = { Text("Ödeme hesabı") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(accountExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(accountExpanded, { accountExpanded = false }) {
+                        DropdownMenuItem(text = { Text("Tüm hesaplar") }, onClick = { selectedAccountId = null; accountExpanded = false })
+                        accounts.forEach { account ->
+                            DropdownMenuItem(text = { Text(account.name) }, onClick = { selectedAccountId = account.id; accountExpanded = false })
+                        }
+                    }
+                }
+                OutlinedTextField(minimumText, { minimumText = it }, label = { Text("En düşük tutar (TL)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(maximumText, { maximumText = it }, label = { Text("En yüksek tutar (TL)") }, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onApply(ExpenseFilter(query, selectedCategoryId, selectedAccountId, MoneyFormatter.parse(minimumText), MoneyFormatter.parse(maximumText)))
+            }) { Text("Uygula") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onClear) { Text("Temizle") }
+                TextButton(onClick = onDismiss) { Text("Vazgeç") }
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

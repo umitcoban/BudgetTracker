@@ -27,12 +27,14 @@ class ReportsViewModel @Inject constructor(
             combine(
                 calculator.getSummaryForMonth(month),
                 calculator.getSummaryForMonth(month.minusMonths(1)),
-                netWorthRepository.observeSnapshotForMonth(month)
-            ) { current, previous, netWorth ->
+                netWorthRepository.observeSnapshotForMonth(month),
+                sixMonthTrend(month)
+            ) { current, previous, netWorth, trend ->
                 ReportsUiState.Success(
                     currentMonth = current,
                     previousMonth = previous,
-                    netWorth = netWorth
+                    netWorth = netWorth,
+                    trend = trend
                 )
             }
         }
@@ -40,13 +42,41 @@ class ReportsViewModel @Inject constructor(
 
     fun nextMonth() { _selectedMonth.value = _selectedMonth.value.plusMonths(1) }
     fun previousMonth() { _selectedMonth.value = _selectedMonth.value.minusMonths(1) }
+
+    private fun sixMonthTrend(lastMonth: YearMonth): Flow<List<MonthlyTrendPoint>> {
+        return combine(
+            calculator.getSummaryForMonth(lastMonth.minusMonths(5)),
+            calculator.getSummaryForMonth(lastMonth.minusMonths(4)),
+            calculator.getSummaryForMonth(lastMonth.minusMonths(3)),
+            calculator.getSummaryForMonth(lastMonth.minusMonths(2)),
+            calculator.getSummaryForMonth(lastMonth.minusMonths(1)),
+            calculator.getSummaryForMonth(lastMonth)
+        ) { summaries ->
+            summaries.map { summary ->
+                MonthlyTrendPoint(
+                    month = summary.yearMonth,
+                    incomeAmount = summary.totalIncomeAmount,
+                    expenseAmount = summary.totalExpenseAmount,
+                    remainingAmount = summary.remainingAfterSavingAndFixedPayments
+                )
+            }
+        }
+    }
 }
+
+data class MonthlyTrendPoint(
+    val month: YearMonth,
+    val incomeAmount: Long,
+    val expenseAmount: Long,
+    val remainingAmount: Long
+)
 
 sealed interface ReportsUiState {
     data object Loading : ReportsUiState
     data class Success(
         val currentMonth: MonthlyBudgetSummary,
         val previousMonth: MonthlyBudgetSummary,
-        val netWorth: NetWorthSnapshot?
+        val netWorth: NetWorthSnapshot?,
+        val trend: List<MonthlyTrendPoint>
     ) : ReportsUiState
 }

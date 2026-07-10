@@ -34,6 +34,26 @@ class ExpensesViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val _filter = MutableStateFlow(ExpenseFilter())
+    val filter: StateFlow<ExpenseFilter> = _filter.asStateFlow()
+
+    val filteredExpenses: StateFlow<List<Expense>> = combine(expenses, _filter) { expenses, filter ->
+        expenses.filter { expense ->
+            val queryMatches = filter.query.isBlank() || listOfNotNull(
+                expense.title,
+                expense.note,
+                expense.category?.name,
+                expense.account?.name
+            ).any { value -> value.contains(filter.query.trim(), ignoreCase = true) }
+            val categoryMatches = filter.categoryId == null || expense.categoryId == filter.categoryId
+            val accountMatches = filter.accountId == null || expense.paymentAccountId == filter.accountId
+            val minimumMatches = filter.minimumAmount == null || expense.amount >= filter.minimumAmount
+            val maximumMatches = filter.maximumAmount == null || expense.amount <= filter.maximumAmount
+
+            queryMatches && categoryMatches && accountMatches && minimumMatches && maximumMatches
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val categories: StateFlow<List<Category>> = categoryRepository.observeActiveCategories()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -49,6 +69,14 @@ class ExpensesViewModel @Inject constructor(
 
     fun previousMonth() {
         _selectedMonth.value = _selectedMonth.value.minusMonths(1)
+    }
+
+    fun updateFilter(filter: ExpenseFilter) {
+        _filter.value = filter
+    }
+
+    fun clearFilter() {
+        _filter.value = ExpenseFilter()
     }
 
     fun addExpense(expense: Expense) {
@@ -137,6 +165,17 @@ class ExpensesViewModel @Inject constructor(
     fun clearExchangeRateState() {
         _exchangeRateState.value = ExchangeRateUiState.Idle
     }
+}
+
+data class ExpenseFilter(
+    val query: String = "",
+    val categoryId: Long? = null,
+    val accountId: Long? = null,
+    val minimumAmount: Long? = null,
+    val maximumAmount: Long? = null
+) {
+    val isActive: Boolean
+        get() = query.isNotBlank() || categoryId != null || accountId != null || minimumAmount != null || maximumAmount != null
 }
 
 sealed interface ExchangeRateUiState {

@@ -19,67 +19,36 @@ class PdfExportService @Inject constructor(
     fun exportReportToPdf(uri: Uri, summary: MonthlyBudgetSummary): Boolean {
         return try {
             val pdfDocument = PdfDocument()
-            val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create() // A4
-            val page = pdfDocument.startPage(pageInfo)
-            val canvas: Canvas = page.canvas
-            val paint = Paint()
-
-            var y = 50f
-            
-            // Title
-            paint.textSize = 20f
-            paint.isFakeBoldText = true
-            canvas.drawText("BudgetTracker Aylık Rapor", 50f, y, paint)
-            y += 40f
-
-            // Month
-            paint.textSize = 14f
-            paint.isFakeBoldText = false
-            canvas.drawText("Dönem: ${DateUtils.formatMonthYear(summary.yearMonth)}", 50f, y, paint)
-            y += 30f
-
-            // Summary section
-            drawRow(canvas, paint, "Maaş", MoneyFormatter.format(summary.salaryAmount), 50f, y)
-            y += 20f
-            drawRow(canvas, paint, "Ek Gelirler", MoneyFormatter.format(summary.additionalIncomeAmount), 50f, y)
-            y += 20f
-            paint.isFakeBoldText = true
-            drawRow(canvas, paint, "Toplam Gelir", MoneyFormatter.format(summary.totalIncomeAmount), 50f, y)
-            paint.isFakeBoldText = false
-            y += 20f
-            drawRow(canvas, paint, "Tasarruf Hedefi", MoneyFormatter.format(summary.savingGoalAmount), 50f, y)
-            y += 20f
-            drawRow(canvas, paint, "Toplam Harcama", MoneyFormatter.format(summary.totalExpenseAmount), 50f, y)
-            y += 20f
-            drawRow(canvas, paint, "Abonelikler", MoneyFormatter.format(summary.subscriptionPlannedAmount), 50f, y)
-            y += 20f
-            drawRow(canvas, paint, "Kredi Ödemeleri", MoneyFormatter.format(summary.loanPaymentAmount), 50f, y)
-            y += 20f
-            drawRow(canvas, paint, "Sabit Giderler", MoneyFormatter.format(summary.fixedExpenseAmount), 50f, y)
-            y += 20f
-            drawRow(canvas, paint, "Toplam Planlı Sabit Ödeme", MoneyFormatter.format(summary.projectedFixedPaymentsAmount), 50f, y)
-            y += 20f
-            drawRow(canvas, paint, "Birikim Önerisi", MoneyFormatter.format(summary.suggestedSavingAmount), 50f, y)
-            y += 20f
-            paint.isFakeBoldText = true
-            drawRow(canvas, paint, "Kalan (Birikim Sonrası)", MoneyFormatter.format(summary.remainingAfterSaving), 50f, y)
-            y += 20f
-            drawRow(canvas, paint, "Sabit Ödemeler Sonrası Kalan", MoneyFormatter.format(summary.remainingAfterFixedPayments), 50f, y)
-            y += 40f
-
-            // Categories
-            paint.isFakeBoldText = true
-            canvas.drawText("Kategori Dağılımı", 50f, y, paint)
-            y += 25f
-            paint.isFakeBoldText = false
-            
-            summary.categorySummaries.forEach { cat ->
-                drawRow(canvas, paint, cat.categoryName, MoneyFormatter.format(cat.amount), 70f, y)
-                y += 20f
-                if (y > 800) return@forEach // Basic overflow protection for MVP
+            val rows = buildList {
+                add("Maaş" to MoneyFormatter.format(summary.salaryAmount))
+                add("Ek Gelirler" to MoneyFormatter.format(summary.additionalIncomeAmount))
+                add("Toplam Gelir" to MoneyFormatter.format(summary.totalIncomeAmount))
+                add("Tasarruf Hedefi" to MoneyFormatter.format(summary.savingGoalAmount))
+                add("Toplam Harcama" to MoneyFormatter.format(summary.totalExpenseAmount))
+                add("Abonelikler" to MoneyFormatter.format(summary.subscriptionPlannedAmount))
+                add("Kredi Ödemeleri" to MoneyFormatter.format(summary.loanPaymentAmount))
+                add("Sabit Giderler" to MoneyFormatter.format(summary.fixedExpenseAmount))
+                add("Toplam Planlı Sabit Ödeme" to MoneyFormatter.format(summary.projectedFixedPaymentsAmount))
+                add("Birikim Önerisi" to MoneyFormatter.format(summary.suggestedSavingAmount))
+                add("Kalan (Birikim Sonrası)" to MoneyFormatter.format(summary.remainingAfterSaving))
+                add("Sabit Ödemeler Sonrası Kalan" to MoneyFormatter.format(summary.remainingAfterFixedPayments))
+                addAll(summary.categorySummaries.map { "Kategori: ${it.categoryName}" to MoneyFormatter.format(it.amount) })
             }
 
-            pdfDocument.finishPage(page)
+            rows.chunked(32).forEachIndexed { index, pageRows ->
+                val pageInfo = PdfDocument.PageInfo.Builder(595, 842, index + 1).create()
+                val page = pdfDocument.startPage(pageInfo)
+                val canvas: Canvas = page.canvas
+                val paint = Paint().apply { textSize = 12f }
+                canvas.drawText("BudgetTracker Aylık Rapor", 50f, 50f, paint)
+                canvas.drawText("Dönem: ${DateUtils.formatMonthYear(summary.yearMonth)}", 50f, 72f, paint)
+                var y = 105f
+                pageRows.forEach { (label, value) ->
+                    drawRow(canvas, paint, label, value, 50f, y)
+                    y += 20f
+                }
+                pdfDocument.finishPage(page)
+            }
 
             context.contentResolver.openOutputStream(uri)?.use { outputStream ->
                 pdfDocument.writeTo(outputStream)

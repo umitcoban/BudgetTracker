@@ -1,6 +1,8 @@
 package com.umit.budgettracker
 
 import android.os.Bundle
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -18,6 +20,7 @@ import com.umit.budgettracker.core.navigation.NavGraph
 import com.umit.budgettracker.core.navigation.bottomNavItems
 import com.umit.budgettracker.core.domain.usecase.SyncDueSubscriptionExpensesUseCase
 import com.umit.budgettracker.core.ui.theme.BudgetTrackerTheme
+import com.umit.budgettracker.core.reminder.PaymentReminderScheduler
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -25,11 +28,18 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject lateinit var syncDueSubscriptionExpenses: SyncDueSubscriptionExpensesUseCase
+    @Inject lateinit var paymentReminderScheduler: PaymentReminderScheduler
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         lifecycleScope.launch {
             runCatching { syncDueSubscriptionExpenses() }
+        }
+        paymentReminderScheduler.scheduleDailyReminder()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 901)
         }
         enableEdgeToEdge()
         setContent {

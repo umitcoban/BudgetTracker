@@ -111,22 +111,44 @@ class MonthlyBudgetCalculator @Inject constructor(
                 loanPaymentAmount = totalLoans,
                 fixedExpenseAmount = totalFixedExpenses,
                 suggestedSavingAmount = suggestedSaving,
-                categorySummaries = base.budgets.map { budget ->
-                    val spent = plannedMonthExpenses
-                        .filter { it.categoryId == budget.categoryId }
-                        .sumOf { it.netAmount(adjustmentsByExpenseId) }
-                    CategorySummary(
-                        categoryId = budget.categoryId,
-                        categoryName = budget.category?.name ?: "Bilinmeyen",
-                        iconName = budget.category?.iconName ?: "category",
-                        colorValue = budget.category?.colorValue ?: 0xFF9E9E9E.toInt(),
-                        amount = spent,
-                        budgetLimit = budget.limitAmount
-                    )
-                }
+                categorySummaries = buildCategorySummaries(
+                    plannedMonthExpenses = plannedMonthExpenses,
+                    budgets = base.budgets,
+                    adjustmentsByExpenseId = adjustmentsByExpenseId
+                )
             )
         }
     }
+}
+
+private fun buildCategorySummaries(
+    plannedMonthExpenses: List<Expense>,
+    budgets: List<CategoryBudget>,
+    adjustmentsByExpenseId: Map<Long, List<ExpenseAdjustment>>
+): List<CategorySummary> {
+    val expensesByCategory = plannedMonthExpenses.groupBy { it.categoryId }
+    val budgetsByCategory = budgets.associateBy { it.categoryId }
+    val categoryIds = (expensesByCategory.keys + budgetsByCategory.keys).toSortedSet()
+
+    return categoryIds.map { categoryId ->
+        val categoryExpenses = expensesByCategory[categoryId].orEmpty()
+        val budget = budgetsByCategory[categoryId]
+        val category = budget?.category ?: categoryExpenses.firstOrNull()?.category
+        val spent = categoryExpenses.sumOf { it.netAmount(adjustmentsByExpenseId) }
+        val budgetLimit = budget?.limitAmount
+
+        CategorySummary(
+            categoryId = categoryId,
+            categoryName = category?.name ?: "Bilinmeyen",
+            iconName = category?.iconName ?: "category",
+            colorValue = category?.colorValue ?: 0xFF9E9E9E.toInt(),
+            amount = spent,
+            budgetLimit = budgetLimit,
+            percentage = budgetLimit
+                ?.takeIf { it > 0L }
+                ?.let { spent.toFloat() / it }
+        )
+    }.sortedByDescending { it.amount }
 }
 
 private fun Expense.netAmount(adjustmentsByExpenseId: Map<Long, List<ExpenseAdjustment>>): Long {
