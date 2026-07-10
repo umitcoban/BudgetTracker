@@ -17,6 +17,7 @@ data class BudgetTrackerExportDto(
     val installmentGroups: List<InstallmentGroupDto>,
     val loans: List<LoanDto>,
     val loanPayments: List<LoanPaymentDto> = emptyList(),
+    val creditCardStatementRules: List<CreditCardStatementRuleDto> = emptyList(),
     val subscriptions: List<SubscriptionDto>,
     val subscriptionPriceHistory: List<SubscriptionPriceHistoryDto>,
     val categoryBudgets: List<CategoryBudgetDto>,
@@ -106,6 +107,9 @@ data class LoanPaymentDto(
     val amount: Long,
     val paidAt: Long
 )
+
+@Serializable
+data class CreditCardStatementRuleDto(val id: Long, val accountId: Long, val effectiveFromMonth: String, val statementDay: Int, val dueDay: Int)
 
 @Serializable
 data class SubscriptionDto(

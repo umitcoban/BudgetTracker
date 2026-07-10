@@ -27,9 +27,10 @@ import com.umit.budgettracker.core.database.entity.*
         ExpenseAdjustmentEntity::class,
         IncomeEntity::class,
         FixedExpenseEntity::class,
-        LoanPaymentEntity::class
+        LoanPaymentEntity::class,
+        CreditCardStatementRuleEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -52,6 +53,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun incomeDao(): IncomeDao
     abstract fun fixedExpenseDao(): FixedExpenseDao
     abstract fun loanPaymentDao(): LoanPaymentDao
+    abstract fun creditCardStatementRuleDao(): CreditCardStatementRuleDao
 
     companion object {
         const val DATABASE_NAME = "budget_tracker_db"

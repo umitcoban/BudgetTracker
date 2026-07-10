@@ -9,10 +9,12 @@ import com.umit.budgettracker.core.domain.model.CreditCardStatementSummary
 import com.umit.budgettracker.core.domain.model.Expense
 import com.umit.budgettracker.core.domain.model.ExpenseAdjustment
 import com.umit.budgettracker.core.domain.model.PaymentAccount
+import com.umit.budgettracker.core.domain.model.CreditCardStatementRule
 import com.umit.budgettracker.core.domain.repository.CreditCardStatementPaymentRepository
 import com.umit.budgettracker.core.domain.repository.ExpenseAdjustmentRepository
 import com.umit.budgettracker.core.domain.repository.ExpenseRepository
 import com.umit.budgettracker.core.domain.repository.PaymentAccountRepository
+import com.umit.budgettracker.core.domain.repository.CreditCardStatementRuleRepository
 import com.umit.budgettracker.core.database.dao.PaymentAccountDao
 import com.umit.budgettracker.core.database.mapper.toEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -36,6 +38,7 @@ class CardsViewModel @Inject constructor(
     private val adjustmentRepository: ExpenseAdjustmentRepository,
     private val statementPaymentRepository: CreditCardStatementPaymentRepository,
     private val statementCalculator: CreditCardStatementCalculator,
+    private val statementRuleRepository: CreditCardStatementRuleRepository,
     private val dao: PaymentAccountDao // Using DAO for simple CRUD to save time on repository expansion
 ) : ViewModel() {
 
@@ -51,13 +54,14 @@ class CardsViewModel @Inject constructor(
                 repository.observeActiveAccounts(),
                 expenseRepository.observeAllExpenses(),
                 adjustmentRepository.observeAllAdjustments(),
-                statementPaymentRepository.observePaymentsForMonth(month)
-            ) { accounts, expenses, adjustments, payments ->
+                statementPaymentRepository.observePaymentsForMonth(month),
+                statementRuleRepository.observeAllRules()
+            ) { accounts, expenses, adjustments, payments, rules ->
                 val adjustmentsByExpenseId = adjustments.groupBy { it.expenseId }
                 accounts
                     .filter { it.type == AccountType.CREDIT_CARD }
                     .map { account ->
-                        val summary = statementCalculator.calculateStatement(account, month, expenses)
+                        val summary = statementCalculator.calculateStatement(account, month, expenses, rules)
                         CardStatementUiModel(
                             accountId = account.id,
                             summary = summary,
@@ -107,6 +111,12 @@ class CardsViewModel @Inject constructor(
     fun toggleAccountActive(account: PaymentAccount) {
         viewModelScope.launch {
             dao.update(account.copy(isActive = !account.isActive).toEntity())
+        }
+    }
+
+    fun saveStatementRule(accountId: Long, effectiveFromMonth: YearMonth, statementDay: Int, dueDay: Int) {
+        viewModelScope.launch {
+            statementRuleRepository.saveRule(CreditCardStatementRule(0, accountId, effectiveFromMonth, statementDay, dueDay))
         }
     }
 }

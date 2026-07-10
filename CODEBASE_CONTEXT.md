@@ -37,8 +37,8 @@ BudgetTracker is a local-only personal finance and monthly budgeting app. It is 
 - Hilt: 2.51.1
 - Compose BOM: 2024.05.00
 - Database name: `budget_tracker_db`
-- Room database version: 14
-- JSON export schema version: 12
+- Room database version: 15
+- JSON export schema version: 13
 
 ## Non-Negotiable Product Rules
 
@@ -194,6 +194,7 @@ The Room database currently includes these entities:
 - `ExpenseAdjustmentEntity`
 - `IncomeEntity`
 - `FixedExpenseEntity`
+- `CreditCardStatementRuleEntity`
 
 Default seeded categories:
 
@@ -245,7 +246,7 @@ JSON export/import:
 
 - `appName` must be `BudgetTracker`.
 - Unsupported future schema versions must be rejected.
-- Current JSON schema version is 10.
+- Current JSON schema version is 13.
 - Attachment metadata is included in schema version 2.
 - Credit card statement payment status is included in schema version 3.
 - Expense adjustments/refunds are included in schema version 4.
@@ -257,7 +258,20 @@ JSON export/import:
 - Subscription price-history currency/rate metadata is included in schema version 10.
 - Loan early-close date is included in schema version 11.
 - Loan payment records are included in schema version 12.
+- Credit-card statement and due-date rules are included in schema version 13.
 - Replace-mode imports must be confirmed by the user.
+
+## Credit Card Statement Rules
+
+Credit-card statement and due dates are historical effective-month rules, not mutable account-wide values.
+
+Rules:
+
+- A rule starts from `effectiveFromMonth`; the latest rule at or before the relevant month applies.
+- Saving a new rule must preserve prior rules and historical expense planning.
+- Statement day determines the statement-closing month for an expense; due day is resolved from the closing month so changes do not shift older statements.
+- The Cards screen and monthly budget/dashboard projections must use the same rule history.
+- Database migration `14 -> 15` creates `credit_card_statement_rules`; JSON schema version 13 exports and restores these rules.
 
 ## Salary Rule
 
