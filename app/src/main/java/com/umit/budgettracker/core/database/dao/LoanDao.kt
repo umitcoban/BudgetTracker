@@ -15,6 +15,14 @@ interface LoanDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(loans: List<LoanEntity>)
 
+    @Query("SELECT * FROM loans WHERE id = :id")
+    suspend fun getById(id: Long): LoanEntity?
+
+    @Query(
+        "UPDATE loans SET isActive = 0, closedAt = :closedAt, updatedAt = :updatedAt WHERE id = :id"
+    )
+    suspend fun closeEarly(id: Long, closedAt: Long, updatedAt: Long)
+
     @Delete
     suspend fun delete(loan: LoanEntity)
 }

@@ -52,7 +52,21 @@ class JsonSerializationTest {
               "paymentAccounts": [],
               "expenses": [],
               "installmentGroups": [],
-              "loans": [],
+              "loans": [
+                {
+                  "id": 1,
+                  "title": "Konut Kredisi",
+                  "principalAmount": 10000000,
+                  "monthlyPaymentAmount": 500000,
+                  "installmentCount": 24,
+                  "startMonth": "2026-05",
+                  "paymentDay": 5,
+                  "categoryId": null,
+                  "paymentAccountId": null,
+                  "note": null,
+                  "isActive": false
+                }
+              ],
               "subscriptions": [],
               "subscriptionPriceHistory": [
                 {"id": 1, "subscriptionId": 1, "amount": 50000, "effectiveFromMonth": "2026-05"}
@@ -72,5 +86,6 @@ class JsonSerializationTest {
         assertEquals(9, decoded.schemaVersion)
         assertEquals(50_000L, decoded.subscriptionPriceHistory.single().amount)
         assertNull(decoded.subscriptionPriceHistory.single().originalCurrency)
+        assertNull(decoded.loans.single().closedAt)
     }
 }

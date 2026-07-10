@@ -37,8 +37,8 @@ BudgetTracker is a local-only personal finance and monthly budgeting app. It is 
 - Hilt: 2.51.1
 - Compose BOM: 2024.05.00
 - Database name: `budget_tracker_db`
-- Room database version: 12
-- JSON export schema version: 10
+- Room database version: 13
+- JSON export schema version: 11
 
 ## Non-Negotiable Product Rules
 
@@ -255,6 +255,7 @@ JSON export/import:
 - Fixed recurring expenses are included in schema version 8.
 - Expense links to processed fixed expenses are included in schema version 9.
 - Subscription price-history currency/rate metadata is included in schema version 10.
+- Loan early-close date is included in schema version 11.
 - Replace-mode imports must be confirmed by the user.
 
 ## Salary Rule
@@ -309,6 +310,21 @@ totalIncomeAmount = salaryAmount + additionalIncomeAmount
 ```
 
 Remaining balance calculations must use total income, not salary alone.
+
+## Loan Rule
+
+For newly created or edited loans, monthly payment is derived from the principal and installment count:
+
+```text
+monthlyPaymentAmount = principalAmount / installmentCount
+```
+
+Rules:
+
+- Users must not enter `monthlyPaymentAmount` manually in the loan form.
+- The calculation must use `Long` minor units and integer arithmetic; do not use `Double`.
+- The UI may show the calculated amount as a read-only preview, but the ViewModel or domain calculator must calculate it again before saving.
+- Existing loans retain their stored monthly-payment values until the user edits the record.
 
 ## Fixed Expense and Savings Suggestion Rule
 
@@ -566,6 +582,30 @@ Current focused regression coverage includes:
 - Foreign-currency subscription price history keeps historical TRY prices when future prices switch to EUR/USD.
 - Foreign-currency subscription payments preserve original amount, currency, and rate metadata when processed into expenses.
 - Old JSON export shapes without newly added nullable fields decode with safe defaults.
+
+New persistent fields should add focused coverage for:
+
+- Existing JSON exports that omit the new field, which must decode to a safe default.
+- New JSON exports that preserve the new field through a serialization round trip.
+- Any calculator or projection behavior affected by the field.
+
+## Cross-Layer Change Checklist
+
+Use this checklist for every feature that changes a domain model, persisted data, or a financial lifecycle state.
+
+1. Update the domain model, Room entity, and both `toDomain` / `toEntity` mapper directions together.
+2. Use named constructor arguments when adding or changing mapper fields. Do not apply broad patches to repeated field blocks without reviewing the exact mapper target afterward.
+3. Add the required DAO query and repository behavior, including safe-delete checks for linked historical records.
+4. If the Room schema changes, increment the database version, add the explicit migration to `DatabaseModule`, and commit the generated Room schema JSON. Existing rows must receive a safe value, usually a nullable column or a migration backfill.
+5. If persisted data is exported, update the export DTO, export service, import service, and supported JSON schema version together. New DTO fields must be nullable or have defaults when old export files lack them.
+6. Keep destructive operations explicitly confirmed and ensure that state changes do not silently alter or delete historical expenses.
+7. Run `git diff --check` and inspect the changed mapper, migration, DTO, and UI call sites before declaring the work complete.
+8. Run `./gradlew test` after implementation. Resolve compilation errors and newly introduced warnings before handoff; retain any unrelated existing warnings as a documented follow-up.
+
+Examples:
+
+- Loan early close: store a nullable close date, mark the loan inactive so future projections stop, preserve historical expenses, prevent deletion when `expenses.loanId` still references the loan, and include the close date in JSON schema version 11.
+- A new nullable Room column: migrate with `ALTER TABLE ... ADD COLUMN`, retain all old values, and confirm the new `app/schemas/.../<version>.json` file is generated.
 
 ## Verification Commands
 

@@ -200,8 +200,8 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
         override fun observeAllLoans(): Flow<List<Loan>> = flowOf(emptyList())
         override fun observeLoanById(id: Long): Flow<Loan?> = flowOf(null)
         override suspend fun upsertLoan(loan: Loan) = Unit
-        override suspend fun deactivateLoan(id: Long) = Unit
-        override suspend fun deleteLoan(id: Long) = Unit
+        override suspend fun closeLoanEarly(id: Long, closedAt: java.time.LocalDate) = Unit
+        override suspend fun deleteLoan(id: Long) = com.umit.budgettracker.core.domain.repository.LoanDeletionResult.Deleted
     }
 
     private class FakeFixedExpenseRepository(private val fixedExpenses: List<FixedExpense>) : FixedExpenseRepository {
