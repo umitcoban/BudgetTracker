@@ -171,6 +171,28 @@ fun DashboardScreen(
                             containerColor = MaterialTheme.colorScheme.errorContainer
                         )
                     }
+
+                    if (summary.categorySummaries.isNotEmpty()) {
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "En Çok Harcama Yapılan Kategoriler",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                TextButton(onClick = { navController.navigate(Screen.Reports.route) }) {
+                                    Text("Tümü")
+                                }
+                            }
+                        }
+                        items(summary.categorySummaries.take(5)) { category ->
+                            CategorySummaryRow(category, summary.totalExpenseAmount)
+                        }
+                    }
                     
                     item {
                         Card(
@@ -261,18 +283,7 @@ fun DashboardScreen(
                         }
                     }
 
-                    if (summary.categorySummaries.isNotEmpty()) {
-                        item {
-                            Text(
-                                text = "Kategorilere Göre Harcama",
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        }
-                        items(summary.categorySummaries) { category ->
-                            CategorySummaryRow(category)
-                        }
-                    } else {
+                    if (summary.categorySummaries.isEmpty()) {
                         item {
                             Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                                 Text(text = "Bu ay henüz harcama yok.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -351,41 +362,64 @@ fun SummaryCard(
 }
 
 @Composable
-fun CategorySummaryRow(summary: CategorySummary) {
+fun CategorySummaryRow(summary: CategorySummary, totalExpenseAmount: Long) {
+    val share = if (totalExpenseAmount > 0L) {
+        summary.amount.toFloat() / totalExpenseAmount
+    } else {
+        0f
+    }
+    val budgetProgress = summary.percentage
+    val progress = budgetProgress ?: share
+    val progressColor = when {
+        budgetProgress != null && budgetProgress > 1f -> MaterialTheme.colorScheme.error
+        budgetProgress != null && budgetProgress >= 0.8f -> MaterialTheme.colorScheme.tertiary
+        else -> Color(summary.colorValue)
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Row(
+        Column(
             modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .padding(8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    IconMapper.getIcon(summary.iconName),
-                    contentDescription = null,
-                    tint = Color(summary.colorValue)
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = summary.categoryName, style = MaterialTheme.typography.bodyLarge)
-                if (summary.budgetLimit != null) {
-                    Text(
-                        text = "Limit: ${MoneyFormatter.format(summary.budgetLimit)}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (summary.percentage != null && summary.percentage > 1f) Color.Red else Color.Unspecified
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        IconMapper.getIcon(summary.iconName),
+                        contentDescription = null,
+                        tint = Color(summary.colorValue)
                     )
                 }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = summary.categoryName, style = MaterialTheme.typography.bodyLarge)
+                    val detail = if (summary.budgetLimit != null) {
+                        "${MoneyFormatter.format(summary.amount)} / ${MoneyFormatter.format(summary.budgetLimit)}"
+                    } else {
+                        "Toplam harcamanın %${(share * 100).toInt()}\'i"
+                    }
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = MoneyFormatter.format(summary.amount),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold
+                )
             }
-            Text(
-                text = MoneyFormatter.format(summary.amount),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+                color = progressColor
             )
         }
     }

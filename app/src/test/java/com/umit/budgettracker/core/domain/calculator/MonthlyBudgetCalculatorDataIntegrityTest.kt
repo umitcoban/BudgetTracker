@@ -71,6 +71,36 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
         assertEquals(10_000L, june.creditCardPaymentAmount)
     }
 
+    @Test
+    fun getSummaryForMonth_includesSpentCategoriesWithoutBudget() = runBlocking {
+        val account = PaymentAccount(1L, "Banka", AccountType.BANK_ACCOUNT, null, null, true)
+        val category = Category(
+            id = 5L,
+            name = "Evcil Hayvan",
+            iconName = "pets",
+            colorValue = 0xFF4CAF50.toInt(),
+            type = CategoryType.EXPENSE,
+            isDefault = false,
+            isActive = true,
+            sortOrder = 0
+        )
+        val expense = expense(
+            amount = 12_500L,
+            date = LocalDate.of(2026, 5, 10),
+            account = account,
+            category = category
+        )
+
+        val summary = calculator(expenses = listOf(expense))
+            .getSummaryForMonth(YearMonth.of(2026, 5))
+            .first()
+
+        val categorySummary = summary.categorySummaries.single()
+        assertEquals("Evcil Hayvan", categorySummary.categoryName)
+        assertEquals(12_500L, categorySummary.amount)
+        assertEquals(null, categorySummary.budgetLimit)
+    }
+
     private fun calculator(
         expenses: List<Expense> = emptyList(),
         fixedExpenses: List<FixedExpense> = emptyList()
@@ -92,7 +122,7 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
                 expenseRepository = expenseRepository,
                 exchangeRateService = FakeExchangeRateService()
             ),
-            loanCalculator = LoanMonthlyCalculator(FakeLoanRepository()),
+            loanCalculator = LoanMonthlyCalculator(FakeLoanRepository(), FakeLoanPaymentRepository()),
             fixedExpenseCalculator = FixedExpenseMonthlyCalculator(FakeFixedExpenseRepository(fixedExpenses))
         )
     }
@@ -101,17 +131,19 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
         amount: Long,
         date: LocalDate,
         account: PaymentAccount,
-        fixedExpenseId: Long? = null
+        fixedExpenseId: Long? = null,
+        category: Category? = null
     ) = Expense(
         id = amount + date.toEpochDay(),
         title = "Harcama",
         amount = amount,
         expenseDate = date,
-        categoryId = 1L,
+        categoryId = category?.id ?: 1L,
         paymentAccountId = account.id,
         paymentSourceType = account.type,
         note = null,
         fixedExpenseId = fixedExpenseId,
+        category = category,
         account = account
     )
 
@@ -202,6 +234,13 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
         override suspend fun upsertLoan(loan: Loan) = Unit
         override suspend fun closeLoanEarly(id: Long, closedAt: java.time.LocalDate) = Unit
         override suspend fun deleteLoan(id: Long) = com.umit.budgettracker.core.domain.repository.LoanDeletionResult.Deleted
+    }
+
+    private class FakeLoanPaymentRepository : LoanPaymentRepository {
+        override fun observeAllPayments(): Flow<List<LoanPayment>> = flowOf(emptyList())
+        override fun observePaymentsForMonth(month: YearMonth): Flow<List<LoanPayment>> = flowOf(emptyList())
+        override suspend fun getPayment(loanId: Long, month: YearMonth): LoanPayment? = null
+        override suspend fun insertPayment(payment: LoanPayment) = Unit
     }
 
     private class FakeFixedExpenseRepository(private val fixedExpenses: List<FixedExpense>) : FixedExpenseRepository {

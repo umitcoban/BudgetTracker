@@ -1,25 +1,29 @@
 package com.umit.budgettracker.core.domain.calculator
 
 import com.umit.budgettracker.core.domain.model.LoanMonthlyPayment
+import com.umit.budgettracker.core.domain.repository.LoanPaymentRepository
 import com.umit.budgettracker.core.domain.repository.LoanRepository
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import java.time.YearMonth
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
 class LoanMonthlyCalculator @Inject constructor(
-    private val loanRepository: LoanRepository
+    private val loanRepository: LoanRepository,
+    private val loanPaymentRepository: LoanPaymentRepository
 ) {
     fun getPaymentsForMonth(yearMonth: YearMonth): Flow<List<LoanMonthlyPayment>> {
-        return loanRepository.observeActiveLoans().map { loans ->
+        return combine(
+            loanRepository.observeActiveLoans(),
+            loanPaymentRepository.observePaymentsForMonth(yearMonth)
+        ) { loans, paidPayments ->
+            val paidLoanIds = paidPayments.map { it.loanId }.toSet()
             loans.mapNotNull { loan ->
-                val start = loan.startMonth
-                val end = start.plusMonths((loan.installmentCount - 1).toLong())
-                
-                if (yearMonth.isBefore(start) || yearMonth.isAfter(end)) {
+                if (!LoanPaymentRules.isDueForMonth(loan, yearMonth) || loan.id in paidLoanIds) {
                     null
                 } else {
+                    val start = loan.startMonth
                     val monthsDiff = ChronoUnit.MONTHS.between(start, yearMonth).toInt()
                     val currentInstallment = monthsDiff + 1
                     val remainingInstallments = loan.installmentCount - currentInstallment

@@ -22,6 +22,7 @@ class JsonExportService @Inject constructor(
     private val installmentRepository: InstallmentRepository,
     private val subscriptionRepository: SubscriptionRepository,
     private val loanRepository: LoanRepository,
+    private val loanPaymentRepository: LoanPaymentRepository,
     private val budgetRepository: CategoryBudgetRepository,
     private val templateRepository: ExpenseTemplateRepository,
     private val debtRepository: DebtRepository,
@@ -35,7 +36,7 @@ class JsonExportService @Inject constructor(
     suspend fun exportToJson(uri: Uri): ExportResult {
         return try {
             val dto = BudgetTrackerExportDto(
-                schemaVersion = 11,
+                schemaVersion = 12,
                 exportedAt = Instant.now().toString(),
                 salaryRules = salaryRepository.observeAllSalaryRules().first().map { 
                     SalaryRuleDto(it.id, it.amount, it.effectiveStartMonth.toString(), it.note) 
@@ -93,6 +94,9 @@ class JsonExportService @Inject constructor(
                 },
                 loans = loanRepository.observeAllLoans().first().map { 
                     LoanDto(it.id, it.title, it.principalAmount, it.monthlyPaymentAmount, it.installmentCount, it.startMonth.toString(), it.paymentDay, it.categoryId, it.paymentAccountId, it.note, it.isActive, it.closedAt?.toEpochDay())
+                },
+                loanPayments = loanPaymentRepository.observeAllPayments().first().map {
+                    LoanPaymentDto(it.id, it.loanId, it.paymentMonth.toString(), it.amount, it.paidAt.toEpochDay())
                 },
                 subscriptions = subscriptionRepository.observeAllSubscriptions().first().map { 
                     SubscriptionDto(

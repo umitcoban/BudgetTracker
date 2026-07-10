@@ -29,7 +29,7 @@ class JsonImportService @Inject constructor(
                 return ImportResult.Error("Bu dosya BudgetTracker uygulamasına ait değil.")
             }
             
-            if (dto.schemaVersion > 11) {
+            if (dto.schemaVersion > 12) {
                 return ImportResult.Error("Bu yedek dosyası uygulamanın desteklemediği bir sürüme ait.")
             }
 
@@ -53,6 +53,9 @@ class JsonImportService @Inject constructor(
                 db.monthlySavingGoalDao().insertAll(dto.savingGoals.map { it.toEntity() })
                 db.expenseDao().insertAll(dto.expenses.map { it.toEntity() })
                 db.loanDao().insertAll(dto.loans.map { it.toEntity() })
+                if (dto.schemaVersion >= 12) {
+                    db.loanPaymentDao().insertAll(dto.loanPayments.map { it.toEntity() })
+                }
                 db.subscriptionDao().insertAll(dto.subscriptions.map { it.toEntity() })
                 
                 dto.subscriptionPriceHistory.forEach { db.subscriptionDao().insertPriceHistory(it.toEntity()) }
@@ -127,6 +130,13 @@ private fun LoanDto.toEntity() = com.umit.budgettracker.core.database.entity.Loa
     note = note,
     isActive = isActive,
     closedAt = closedAt
+)
+private fun LoanPaymentDto.toEntity() = com.umit.budgettracker.core.database.entity.LoanPaymentEntity(
+    id = id,
+    loanId = loanId,
+    paymentMonth = paymentMonth,
+    amount = amount,
+    paidAt = paidAt
 )
 private fun SubscriptionDto.toEntity() = com.umit.budgettracker.core.database.entity.SubscriptionEntity(
     id = id,

@@ -4,25 +4,37 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.umit.budgettracker.core.domain.calculator.LoanPaymentCalculator
 import com.umit.budgettracker.core.domain.model.Loan
+import com.umit.budgettracker.core.domain.repository.LoanPaymentRepository
 import com.umit.budgettracker.core.domain.repository.LoanDeletionResult
 import com.umit.budgettracker.core.domain.repository.LoanRepository
+import com.umit.budgettracker.core.domain.usecase.MarkLoanPaymentAsPaidUseCase
+import com.umit.budgettracker.core.domain.usecase.MarkLoanPaymentResult
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.YearMonth
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class LoansViewModel @Inject constructor(
-    private val repository: LoanRepository
+    private val repository: LoanRepository,
+    loanPaymentRepository: LoanPaymentRepository,
+    private val markLoanPaymentAsPaid: MarkLoanPaymentAsPaidUseCase
 ) : ViewModel() {
+
+    private val _selectedMonth = MutableStateFlow(YearMonth.now())
+    val selectedMonth: StateFlow<YearMonth> = _selectedMonth.asStateFlow()
 
     val loans: StateFlow<List<Loan>> = repository.observeAllLoans()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val paidLoanIds: StateFlow<Set<Long>> = _selectedMonth
+        .flatMapLatest { month -> loanPaymentRepository.observePaymentsForMonth(month) }
+        .map { payments -> payments.map { it.loanId }.toSet() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
@@ -46,6 +58,24 @@ class LoansViewModel @Inject constructor(
         viewModelScope.launch {
             repository.closeLoanEarly(loan.id, LocalDate.now())
             _message.value = "Kredi erken kapatıldı. Gelecek taksitler planlamadan çıkarıldı."
+        }
+    }
+
+    fun previousMonth() {
+        _selectedMonth.value = _selectedMonth.value.minusMonths(1)
+    }
+
+    fun nextMonth() {
+        _selectedMonth.value = _selectedMonth.value.plusMonths(1)
+    }
+
+    fun markPaymentAsPaid(loan: Loan) {
+        viewModelScope.launch {
+            _message.value = when (markLoanPaymentAsPaid(loan.id, _selectedMonth.value)) {
+                MarkLoanPaymentResult.MarkedPaid -> "Kredi ödemesi ödendi olarak işaretlendi."
+                MarkLoanPaymentResult.AlreadyPaid -> "Bu kredi ödemesi zaten işaretlenmiş."
+                MarkLoanPaymentResult.NotDue -> "Bu kredi seçili ay için ödeme beklemiyor."
+            }
         }
     }
 

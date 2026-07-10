@@ -2,6 +2,7 @@ package com.umit.budgettracker.feature.reports
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -10,7 +11,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.umit.budgettracker.core.domain.model.CategorySummary
+import com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary
+import com.umit.budgettracker.core.ui.IconMapper
 import com.umit.budgettracker.core.util.MoneyFormatter
+import com.umit.budgettracker.core.util.DateUtils
 import com.umit.budgettracker.feature.dashboard.MonthSelector
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,6 +58,32 @@ fun ReportsScreen(
                     }
 
                     item {
+                        Text(text = "Son 6 Ay Trendi", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        SixMonthTrendCard(state.trend)
+                    }
+
+                    item {
+                        Text(text = "Harcama Kanalları", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        SpendingChannelsCard(state.currentMonth)
+                    }
+
+                    if (state.currentMonth.categorySummaries.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Kategori Dağılımı",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        items(state.currentMonth.categorySummaries) { category ->
+                            CategoryReportRow(category, state.currentMonth.totalExpenseAmount)
+                        }
+                    }
+
+                    item {
                         Text(text = "Karşılaştırma (Önceki Ay)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(8.dp))
                         ComparisonCard(state.currentMonth, state.previousMonth)
@@ -78,7 +109,50 @@ fun ReportsScreen(
 }
 
 @Composable
-fun ReportSummaryCard(summary: com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary) {
+private fun SixMonthTrendCard(trend: List<MonthlyTrendPoint>) {
+    val maximumAmount = trend.maxOfOrNull { maxOf(it.incomeAmount, it.expenseAmount) } ?: 0L
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            trend.forEach { point ->
+                val incomeProgress = if (maximumAmount > 0L) point.incomeAmount.toFloat() / maximumAmount else 0f
+                val expenseProgress = if (maximumAmount > 0L) point.expenseAmount.toFloat() / maximumAmount else 0f
+                Text(DateUtils.formatMonthYear(point.month), fontWeight = FontWeight.Bold)
+                TrendBar("Gelir", point.incomeAmount, incomeProgress, MaterialTheme.colorScheme.primary)
+                TrendBar("Harcama", point.expenseAmount, expenseProgress, MaterialTheme.colorScheme.error)
+                ReportRow(
+                    "Plan sonrası kalan",
+                    MoneyFormatter.format(point.remainingAmount),
+                    color = if (point.remainingAmount < 0L) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrendBar(label: String, amount: Long, progress: Float, color: Color) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.bodySmall)
+            Text(MoneyFormatter.format(amount), style = MaterialTheme.typography.bodySmall)
+        }
+        LinearProgressIndicator(
+            progress = { progress.coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth(),
+            color = color
+        )
+    }
+}
+
+@Composable
+fun ReportSummaryCard(summary: MonthlyBudgetSummary) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             ReportRow("Maaş", MoneyFormatter.format(summary.salaryAmount))
@@ -102,7 +176,7 @@ fun ReportSummaryCard(summary: com.umit.budgettracker.core.domain.model.MonthlyB
 }
 
 @Composable
-fun ComparisonCard(current: com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary, previous: com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary) {
+fun ComparisonCard(current: MonthlyBudgetSummary, previous: MonthlyBudgetSummary) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             val diff = current.totalExpenseAmount - previous.totalExpenseAmount
@@ -120,8 +194,8 @@ fun ComparisonCard(current: com.umit.budgettracker.core.domain.model.MonthlyBudg
 
 @Composable
 fun DecisionSummaryCard(
-    current: com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary,
-    previous: com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary
+    current: MonthlyBudgetSummary,
+    previous: MonthlyBudgetSummary
 ) {
     val currentCategories = current.categorySummaries.associateBy { it.categoryId }
     val topIncrease = currentCategories.values
@@ -168,6 +242,79 @@ fun NetWorthCard(amount: Long) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Box(modifier = Modifier.padding(16.dp), contentAlignment = Alignment.Center) {
             Text(text = MoneyFormatter.format(amount), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun SpendingChannelsCard(summary: MonthlyBudgetSummary) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ReportRow("Nakit / banka harcamaları", MoneyFormatter.format(summary.directExpenseAmount))
+            ReportRow("Kredi kartı ekstre harcamaları", MoneyFormatter.format(summary.creditCardPaymentAmount))
+            HorizontalDivider()
+            ReportRow(
+                "Toplam harcama",
+                MoneyFormatter.format(summary.totalExpenseAmount),
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun CategoryReportRow(summary: CategorySummary, totalExpenseAmount: Long) {
+    val share = if (totalExpenseAmount > 0L) {
+        summary.amount.toFloat() / totalExpenseAmount
+    } else {
+        0f
+    }
+    val budgetProgress = summary.percentage
+    val progress = budgetProgress ?: share
+    val progressColor = when {
+        budgetProgress != null && budgetProgress > 1f -> MaterialTheme.colorScheme.error
+        budgetProgress != null && budgetProgress >= 0.8f -> MaterialTheme.colorScheme.tertiary
+        else -> Color(summary.colorValue)
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = IconMapper.getIcon(summary.iconName),
+                    contentDescription = null,
+                    tint = Color(summary.colorValue)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(summary.categoryName, fontWeight = FontWeight.Bold)
+                    val detail = if (summary.budgetLimit != null) {
+                        "Bütçe: ${MoneyFormatter.format(summary.amount)} / ${MoneyFormatter.format(summary.budgetLimit)}"
+                    } else {
+                        "Toplam harcamanın %${(share * 100).toInt()}\'i"
+                    }
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(MoneyFormatter.format(summary.amount), fontWeight = FontWeight.Bold)
+            }
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+                color = progressColor
+            )
         }
     }
 }

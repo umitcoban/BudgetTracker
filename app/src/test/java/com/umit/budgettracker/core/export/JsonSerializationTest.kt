@@ -87,5 +87,32 @@ class JsonSerializationTest {
         assertEquals(50_000L, decoded.subscriptionPriceHistory.single().amount)
         assertNull(decoded.subscriptionPriceHistory.single().originalCurrency)
         assertNull(decoded.loans.single().closedAt)
+        assertEquals(emptyList<LoanPaymentDto>(), decoded.loanPayments)
+    }
+
+    @Test
+    fun loanPayments_roundTripInCurrentSchema() {
+        val dto = BudgetTrackerExportDto(
+            schemaVersion = 12,
+            exportedAt = "2026-07-10T09:00:00Z",
+            salaryRules = emptyList(),
+            savingGoals = emptyList(),
+            categories = emptyList(),
+            paymentAccounts = emptyList(),
+            expenses = emptyList(),
+            installmentGroups = emptyList(),
+            loans = emptyList(),
+            loanPayments = listOf(LoanPaymentDto(1L, 10L, "2026-07", 125_000L, 20_279L)),
+            subscriptions = emptyList(),
+            subscriptionPriceHistory = emptyList(),
+            categoryBudgets = emptyList(),
+            expenseTemplates = emptyList(),
+            debtRecords = emptyList(),
+            netWorthSnapshots = emptyList()
+        )
+
+        val decoded = json.decodeFromString<BudgetTrackerExportDto>(json.encodeToString(dto))
+
+        assertEquals(dto.loanPayments, decoded.loanPayments)
     }
 }
