@@ -1,6 +1,7 @@
 package com.umit.budgettracker.core.domain.calculator
 
 import com.umit.budgettracker.core.domain.model.CreditCardStatementSummary
+import com.umit.budgettracker.core.domain.model.CreditCardStatementRule
 import com.umit.budgettracker.core.domain.model.Expense
 import com.umit.budgettracker.core.domain.model.PaymentAccount
 import java.time.LocalDate
@@ -12,10 +13,12 @@ class CreditCardStatementCalculator @Inject constructor() {
     fun calculateStatement(
         account: PaymentAccount,
         paymentMonth: YearMonth,
-        allExpenses: List<Expense>
+        allExpenses: List<Expense>,
+        rules: List<CreditCardStatementRule> = emptyList()
     ): CreditCardStatementSummary {
-        val statementDay = account.statementDay ?: 1
-        val dueDay = account.dueDay ?: 1
+        val paymentRule = ruleForMonth(account, paymentMonth, rules)
+        val statementDay = paymentRule.statementDay
+        val dueDay = paymentRule.dueDay
 
         // Determine due date in the selected paymentMonth
         var dueDate = paymentMonth.atDay(clampDay(dueDay, paymentMonth))
@@ -30,7 +33,8 @@ class CreditCardStatementCalculator @Inject constructor() {
             paymentMonth
         }
         
-        val statementEndDate = statementEndMonth.atDay(clampDay(statementDay, statementEndMonth))
+        val statementRule = ruleForMonth(account, statementEndMonth, rules)
+        val statementEndDate = statementEndMonth.atDay(clampDay(statementRule.statementDay, statementEndMonth))
         val statementStartDate = statementEndDate.minusMonths(1).plusDays(1)
 
         val includedExpenses = allExpenses.filter {
@@ -53,5 +57,15 @@ class CreditCardStatementCalculator @Inject constructor() {
 
     private fun clampDay(day: Int, month: YearMonth): Int {
         return day.coerceAtMost(month.lengthOfMonth())
+    }
+
+    private fun ruleForMonth(
+        account: PaymentAccount,
+        month: YearMonth,
+        rules: List<CreditCardStatementRule>
+    ): CreditCardStatementRule {
+        return rules.filter { it.accountId == account.id && !it.effectiveFromMonth.isAfter(month) }
+            .maxByOrNull { it.effectiveFromMonth }
+            ?: CreditCardStatementRule(0, account.id, YearMonth.of(1, 1), account.statementDay ?: 1, account.dueDay ?: 1)
     }
 }

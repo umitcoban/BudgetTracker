@@ -50,6 +50,10 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun bindCreditCardStatementRuleRepository(impl: CreditCardStatementRuleRepositoryImpl): CreditCardStatementRuleRepository
+
+    @Binds
+    @Singleton
     abstract fun bindCategoryBudgetRepository(impl: CategoryBudgetRepositoryImpl): CategoryBudgetRepository
 
     @Binds

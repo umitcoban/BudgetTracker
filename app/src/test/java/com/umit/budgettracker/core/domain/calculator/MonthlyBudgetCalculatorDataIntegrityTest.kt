@@ -72,6 +72,47 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
     }
 
     @Test
+    fun getSummaryForMonth_usesEffectiveStatementRuleForHistoricalCreditCardPlanning() = runBlocking {
+        val card = PaymentAccount(
+            id = 3L,
+            name = "Kart",
+            type = AccountType.CREDIT_CARD,
+            statementDay = 13,
+            dueDay = 5,
+            isActive = true
+        )
+        val expenseBeforeChange = expense(
+            amount = 10_000L,
+            date = LocalDate.of(2026, 6, 12),
+            account = card
+        )
+        val expenseInPreviousStatementCycle = expense(
+            amount = 20_000L,
+            date = LocalDate.of(2026, 7, 14),
+            account = card
+        )
+        val rule = CreditCardStatementRule(
+            id = 1L,
+            accountId = card.id,
+            effectiveFromMonth = YearMonth.of(2026, 8),
+            statementDay = 11,
+            dueDay = 20
+        )
+        val calc = calculator(
+            expenses = listOf(expenseBeforeChange, expenseInPreviousStatementCycle),
+            statementRules = listOf(rule)
+        )
+
+        val july = calc.getSummaryForMonth(YearMonth.of(2026, 7)).first()
+        val august = calc.getSummaryForMonth(YearMonth.of(2026, 8)).first()
+        val september = calc.getSummaryForMonth(YearMonth.of(2026, 9)).first()
+
+        assertEquals(10_000L, july.creditCardPaymentAmount)
+        assertEquals(20_000L, august.creditCardPaymentAmount)
+        assertEquals(0L, september.creditCardPaymentAmount)
+    }
+
+    @Test
     fun getSummaryForMonth_includesSpentCategoriesWithoutBudget() = runBlocking {
         val account = PaymentAccount(1L, "Banka", AccountType.BANK_ACCOUNT, null, null, true)
         val category = Category(
@@ -103,7 +144,8 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
 
     private fun calculator(
         expenses: List<Expense> = emptyList(),
-        fixedExpenses: List<FixedExpense> = emptyList()
+        fixedExpenses: List<FixedExpense> = emptyList(),
+        statementRules: List<CreditCardStatementRule> = emptyList()
     ): MonthlyBudgetCalculator {
         val expenseRepository = FakeExpenseRepository(expenses)
         val categoryRepository = FakeCategoryRepository()
@@ -115,6 +157,7 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
             expenseRepository = expenseRepository,
             budgetRepository = FakeCategoryBudgetRepository(),
             adjustmentRepository = FakeExpenseAdjustmentRepository(),
+            statementRuleRepository = FakeCreditCardStatementRuleRepository(statementRules),
             subscriptionCalculator = SubscriptionMonthlyCalculator(
                 subscriptionRepository = FakeSubscriptionRepository(),
                 categoryRepository = categoryRepository,
@@ -198,6 +241,13 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
         override fun observeForExpense(expenseId: Long): Flow<List<ExpenseAdjustment>> = flowOf(emptyList())
         override suspend fun addAdjustment(adjustment: ExpenseAdjustment) = Unit
         override suspend fun deleteAdjustment(adjustment: ExpenseAdjustment) = Unit
+    }
+
+    private class FakeCreditCardStatementRuleRepository(
+        private val rules: List<CreditCardStatementRule>
+    ) : CreditCardStatementRuleRepository {
+        override fun observeAllRules(): Flow<List<CreditCardStatementRule>> = flowOf(rules)
+        override suspend fun saveRule(rule: CreditCardStatementRule) = Unit
     }
 
     private class FakeSubscriptionRepository : SubscriptionRepository {

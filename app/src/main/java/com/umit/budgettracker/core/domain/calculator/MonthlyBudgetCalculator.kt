@@ -14,6 +14,7 @@ class MonthlyBudgetCalculator @Inject constructor(
     private val expenseRepository: ExpenseRepository,
     private val budgetRepository: CategoryBudgetRepository,
     private val adjustmentRepository: ExpenseAdjustmentRepository,
+    private val statementRuleRepository: CreditCardStatementRuleRepository,
     private val subscriptionCalculator: SubscriptionMonthlyCalculator,
     private val loanCalculator: LoanMonthlyCalculator,
     private val fixedExpenseCalculator: FixedExpenseMonthlyCalculator
@@ -34,12 +35,14 @@ class MonthlyBudgetCalculator @Inject constructor(
         val expenseFlow = combine(
             expenseRepository.observeAllExpenses(),
             budgetRepository.observeBudgetsForMonth(month),
-            adjustmentRepository.observeAllAdjustments()
-        ) { expenses, budgets, adjustments ->
+            adjustmentRepository.observeAllAdjustments(),
+            statementRuleRepository.observeAllRules()
+        ) { expenses, budgets, adjustments, statementRules ->
             MonthlyExpenseInputs(
                 expenses = expenses,
                 budgets = budgets,
-                adjustments = adjustments
+                adjustments = adjustments,
+                statementRules = statementRules
             )
         }
 
@@ -53,7 +56,8 @@ class MonthlyBudgetCalculator @Inject constructor(
                 incomes = incomeInputs.incomes,
                 expenses = expenseInputs.expenses,
                 budgets = expenseInputs.budgets,
-                adjustments = expenseInputs.adjustments
+                adjustments = expenseInputs.adjustments,
+                statementRules = expenseInputs.statementRules
             )
         }
 
@@ -66,7 +70,7 @@ class MonthlyBudgetCalculator @Inject constructor(
             val applicableSalary = SalaryRules.effectiveForMonth(base.salaryRules, month)?.amount ?: 0L
 
             val calendarMonthExpenses = base.expenses.filter { YearMonth.from(it.expenseDate) == month }
-            val plannedMonthExpenses = base.expenses.filter { it.planningMonth() == month }
+            val plannedMonthExpenses = base.expenses.filter { it.planningMonth(base.statementRules) == month }
             val adjustmentsByExpenseId = base.adjustments.groupBy { it.expenseId }
 
             val totalExpenses = plannedMonthExpenses.sumOf { it.netAmount(adjustmentsByExpenseId) }
@@ -156,27 +160,39 @@ private fun Expense.netAmount(adjustmentsByExpenseId: Map<Long, List<ExpenseAdju
     return (amount - adjustmentTotal).coerceAtLeast(0L)
 }
 
-private fun Expense.planningMonth(): YearMonth {
+private fun Expense.planningMonth(statementRules: List<CreditCardStatementRule>): YearMonth {
     if (paymentSourceType != AccountType.CREDIT_CARD) {
         return YearMonth.from(expenseDate)
     }
 
     val account = account ?: return YearMonth.from(expenseDate)
-    val statementDay = account.statementDay ?: return YearMonth.from(expenseDate)
-    val dueDay = account.dueDay ?: return YearMonth.from(expenseDate)
-
     val expenseMonth = YearMonth.from(expenseDate)
+    val statementRule = statementRules.effectiveFor(account.id, expenseMonth)
+    val statementDay = statementRule?.statementDay ?: account.statementDay ?: return expenseMonth
+
     val statementEndMonth = if (expenseDate.dayOfMonth <= statementDay.coerceAtMost(expenseMonth.lengthOfMonth())) {
         expenseMonth
     } else {
         expenseMonth.plusMonths(1)
     }
+    val dueRule = statementRules.effectiveFor(account.id, statementEndMonth)
+    val dueDay = dueRule?.dueDay ?: statementRule?.dueDay ?: account.dueDay ?: return expenseMonth
+    val dueRuleStatementDay = dueRule?.statementDay ?: statementDay
 
-    return if (dueDay <= statementDay) {
+    return if (dueDay <= dueRuleStatementDay) {
         statementEndMonth.plusMonths(1)
     } else {
         statementEndMonth
     }
+}
+
+private fun List<CreditCardStatementRule>.effectiveFor(
+    accountId: Long,
+    month: YearMonth
+): CreditCardStatementRule? {
+    return asSequence()
+        .filter { it.accountId == accountId && !it.effectiveFromMonth.isAfter(month) }
+        .maxByOrNull { it.effectiveFromMonth }
 }
 
 private data class MonthlyIncomeInputs(
@@ -188,7 +204,8 @@ private data class MonthlyIncomeInputs(
 private data class MonthlyExpenseInputs(
     val expenses: List<Expense>,
     val budgets: List<CategoryBudget>,
-    val adjustments: List<ExpenseAdjustment>
+    val adjustments: List<ExpenseAdjustment>,
+    val statementRules: List<CreditCardStatementRule>
 )
 
 private data class MonthlyBudgetInputs(
@@ -197,5 +214,6 @@ private data class MonthlyBudgetInputs(
     val incomes: List<Income>,
     val expenses: List<Expense>,
     val budgets: List<CategoryBudget>,
-    val adjustments: List<ExpenseAdjustment>
+    val adjustments: List<ExpenseAdjustment>,
+    val statementRules: List<CreditCardStatementRule>
 )

@@ -38,6 +38,7 @@ fun CardsScreen(
     val statements by viewModel.statementUiState.collectAsState()
     val selectedMonth by viewModel.selectedMonth.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
+    var accountToEditDates by remember { mutableStateOf<PaymentAccount?>(null) }
 
     Scaffold(
         topBar = {
@@ -70,6 +71,7 @@ fun CardsScreen(
                 AccountRow(
                     account = account,
                     statement = statements.find { it.accountId == account.id },
+                    onEditDates = { accountToEditDates = account },
                     onMarkPaid = { amount -> viewModel.markStatementPaid(account.id, amount) },
                     onMarkUnpaid = { viewModel.markStatementUnpaid(account.id) }
                 )
@@ -85,6 +87,18 @@ fun CardsScreen(
                 }
             )
         }
+
+        accountToEditDates?.let { account ->
+            StatementDatesDialog(
+                account = account,
+                selectedMonth = selectedMonth,
+                onDismiss = { accountToEditDates = null },
+                onConfirm = { month, statementDay, dueDay ->
+                    viewModel.saveStatementRule(account.id, month, statementDay, dueDay)
+                    accountToEditDates = null
+                }
+            )
+        }
     }
 }
 
@@ -92,6 +106,7 @@ fun CardsScreen(
 fun AccountRow(
     account: PaymentAccount,
     statement: CardStatementUiModel?,
+    onEditDates: () -> Unit,
     onMarkPaid: (Long) -> Unit,
     onMarkUnpaid: () -> Unit
 ) {
@@ -124,6 +139,9 @@ fun AccountRow(
                         text = "Kesim: ${account.statementDay}. gün • Son Ödeme: ${account.dueDay}. gün",
                         style = MaterialTheme.typography.bodySmall
                     )
+                    TextButton(onClick = onEditDates, contentPadding = PaddingValues(0.dp)) {
+                        Text("Kesim / ödeme tarihi düzenle")
+                    }
                     statement?.let {
                         CreditCardStatementBlock(
                             statement = it,
@@ -138,6 +156,37 @@ fun AccountRow(
             }
         }
     }
+}
+
+@Composable
+private fun StatementDatesDialog(
+    account: PaymentAccount,
+    selectedMonth: YearMonth,
+    onDismiss: () -> Unit,
+    onConfirm: (YearMonth, Int, Int) -> Unit
+) {
+    var effectiveMonth by remember { mutableStateOf(selectedMonth.toString()) }
+    var statementDay by remember { mutableStateOf(account.statementDay?.toString().orEmpty()) }
+    var dueDay by remember { mutableStateOf(account.dueDay?.toString().orEmpty()) }
+    val parsedMonth = runCatching { YearMonth.parse(effectiveMonth) }.getOrNull()
+    val parsedStatementDay = statementDay.toIntOrNull()
+    val parsedDueDay = dueDay.toIntOrNull()
+    val valid = parsedMonth != null && parsedStatementDay in 1..31 && parsedDueDay in 1..31
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ekstre Tarihi Kuralı") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Bu kural yalnızca seçilen ay ve sonrasındaki ekstreleri etkiler.", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(effectiveMonth, { effectiveMonth = it }, label = { Text("Geçerlilik Ayı (YYYY-MM)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(statementDay, { statementDay = it }, label = { Text("Kesim Günü (1-31)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(dueDay, { dueDay = it }, label = { Text("Son Ödeme Günü (1-31)") }, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = { TextButton(enabled = valid, onClick = { onConfirm(parsedMonth!!, parsedStatementDay!!, parsedDueDay!!) }) { Text("Kaydet") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } }
+    )
 }
 
 @Composable
