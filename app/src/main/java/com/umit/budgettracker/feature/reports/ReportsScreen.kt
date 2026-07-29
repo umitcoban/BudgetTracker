@@ -1,106 +1,132 @@
 package com.umit.budgettracker.feature.reports
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.AutoGraph
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.umit.budgettracker.core.domain.model.CategorySummary
 import com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary
 import com.umit.budgettracker.core.ui.IconMapper
-import com.umit.budgettracker.core.util.MoneyFormatter
+import com.umit.budgettracker.core.ui.components.FinanceCard
+import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
+import com.umit.budgettracker.core.ui.components.MetricTile
 import com.umit.budgettracker.core.util.DateUtils
+import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
+import kotlin.math.absoluteValue
+
+private val reportTabs = listOf("Genel", "Harcamalar", "Nakit Akışı")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReportsScreen(
-    viewModel: ReportsViewModel = hiltViewModel()
-) {
+fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
     val selectedMonth by viewModel.selectedMonth.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    var selectedTab by remember { mutableIntStateOf(0) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("Raporlar") },
-                actions = {
-                    MonthSelector(
-                        selectedMonth = selectedMonth,
-                        onMonthChange = { viewModel.previousMonth() },
-                        onNextMonth = { viewModel.nextMonth() }
-                    )
-                }
+                title = {
+                    Column {
+                        Text("Raporlar", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "Rakamların ne anlattığını gör",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { padding ->
         when (val state = uiState) {
-            is ReportsUiState.Loading -> {
-                Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            ReportsUiState.Loading -> {
+                Box(
+                    Modifier.fillMaxSize().padding(padding),
+                    contentAlignment = Alignment.Center
+                ) {
                     CircularProgressIndicator()
                 }
             }
+
             is ReportsUiState.Success -> {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    item {
-                        Text(text = "Özet", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        ReportSummaryCard(state.currentMonth)
-                    }
-
-                    item {
-                        Text(text = "Son 6 Ay Trendi", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        SixMonthTrendCard(state.trend)
-                    }
-
-                    item {
-                        Text(text = "Harcama Kanalları", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        SpendingChannelsCard(state.currentMonth)
-                    }
-
-                    if (state.currentMonth.categorySummaries.isNotEmpty()) {
-                        item {
-                            Text(
-                                text = "Kategori Dağılımı",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
+                Column(Modifier.fillMaxSize().padding(padding)) {
+                    MonthSelector(
+                        selectedMonth = selectedMonth,
+                        onMonthChange = viewModel::previousMonth,
+                        onNextMonth = viewModel::nextMonth,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    PrimaryTabRow(
+                        selectedTabIndex = selectedTab,
+                        containerColor = MaterialTheme.colorScheme.background,
+                        divider = {}
+                    ) {
+                        reportTabs.forEachIndexed { index, title ->
+                            Tab(
+                                selected = selectedTab == index,
+                                onClick = { selectedTab = index },
+                                text = { Text(title, style = MaterialTheme.typography.labelLarge) }
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                        items(state.currentMonth.categorySummaries) { category ->
-                            CategoryReportRow(category, state.currentMonth.totalExpenseAmount)
                         }
                     }
 
-                    item {
-                        Text(text = "Karşılaştırma (Önceki Ay)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        ComparisonCard(state.currentMonth, state.previousMonth)
-                    }
-
-                    item {
-                        Text(text = "Karar Özeti", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        DecisionSummaryCard(state.currentMonth, state.previousMonth)
-                    }
-
-                    if (state.netWorth != null) {
-                        item {
-                            Text(text = "Net Varlık", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            NetWorthCard(state.netWorth.netWorth)
-                        }
+                    when (selectedTab) {
+                        0 -> OverviewReport(state)
+                        1 -> ExpenseReport(state.currentMonth, state.previousMonth)
+                        else -> CashFlowReport(state)
                     }
                 }
             }
@@ -109,27 +135,164 @@ fun ReportsScreen(
 }
 
 @Composable
-private fun SixMonthTrendCard(trend: List<MonthlyTrendPoint>) {
-    val maximumAmount = trend.maxOfOrNull { maxOf(it.incomeAmount, it.expenseAmount) } ?: 0L
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+private fun OverviewReport(state: ReportsUiState.Success) {
+    val current = state.currentMonth
+    val previous = state.previousMonth
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            trend.forEach { point ->
-                val incomeProgress = if (maximumAmount > 0L) point.incomeAmount.toFloat() / maximumAmount else 0f
-                val expenseProgress = if (maximumAmount > 0L) point.expenseAmount.toFloat() / maximumAmount else 0f
-                Text(DateUtils.formatMonthYear(point.month), fontWeight = FontWeight.Bold)
-                TrendBar("Gelir", point.incomeAmount, incomeProgress, MaterialTheme.colorScheme.primary)
-                TrendBar("Harcama", point.expenseAmount, expenseProgress, MaterialTheme.colorScheme.error)
-                ReportRow(
-                    "Plan sonrası kalan",
-                    MoneyFormatter.format(point.remainingAmount),
-                    color = if (point.remainingAmount < 0L) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+        item { MonthlyResultHero(current, previous) }
+        item { RatioMetrics(current) }
+        item {
+            FinanceSectionHeader(
+                title = "6 aylık görünüm",
+                subtitle = "Gelir ve harcama eğilimi"
+            )
+        }
+        item { TrendChartCard(state.trend) }
+        item {
+            FinanceSectionHeader(
+                title = "Öne çıkanlar",
+                subtitle = "Geçen aya göre önemli değişimler"
+            )
+        }
+        item { DecisionSummaryCard(current, previous) }
+        if (state.netWorth != null) {
+            item {
+                FinanceSectionHeader(
+                    title = "Net varlık",
+                    subtitle = "Varlıkların ve borçlarının net değeri"
+                )
+            }
+            item { NetWorthCard(state.netWorth.netWorth) }
+        }
+    }
+}
+
+@Composable
+private fun ExpenseReport(
+    current: MonthlyBudgetSummary,
+    previous: MonthlyBudgetSummary
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            ExpenseSummaryHeader(current, previous)
+        }
+        item {
+            FinanceSectionHeader(
+                title = "Kategori dağılımı",
+                subtitle = "Toplam harcamadaki pay ve bütçe durumu"
+            )
+        }
+        if (current.categorySummaries.isEmpty()) {
+            item {
+                FinanceCard {
+                    Text(
+                        "Bu ay kategori raporu oluşturacak harcama bulunmuyor.",
+                        modifier = Modifier.padding(20.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else {
+            items(current.categorySummaries) { category ->
+                CategoryReportRow(category, current.totalExpenseAmount)
+            }
+        }
+        item {
+            FinanceSectionHeader(
+                title = "Ödeme kanalları",
+                subtitle = "Harcamaların hangi kaynaktan geldiği"
+            )
+        }
+        item { SpendingChannelsCard(current) }
+    }
+}
+
+@Composable
+private fun CashFlowReport(state: ReportsUiState.Success) {
+    val current = state.currentMonth
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            FinanceSectionHeader(
+                title = "Aylık akış",
+                subtitle = "Gelirden plan sonrası kalana"
+            )
+        }
+        item { CashFlowWaterfall(current) }
+        item {
+            FinanceSectionHeader(
+                title = "Aylara göre kalan",
+                subtitle = "Birikim ve sabit ödemeler sonrasında"
+            )
+        }
+        item { RemainingTrendCard(state.trend) }
+    }
+}
+
+@Composable
+private fun MonthlyResultHero(
+    current: MonthlyBudgetSummary,
+    previous: MonthlyBudgetSummary
+) {
+    val result = current.remainingAfterSavingAndFixedPayments
+    val diff = result - previous.remainingAfterSavingAndFixedPayments
+    FinanceCard(
+        containerColor = if (result >= 0L) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.errorContainer
+        }
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "Ayın net sonucu",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                MoneyFormatter.format(result),
+                style = MaterialTheme.typography.headlineLarge,
+                color = if (result >= 0L) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.error
+                }
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (diff >= 0L) {
+                        Icons.AutoMirrored.Filled.TrendingUp
+                    } else {
+                        Icons.AutoMirrored.Filled.TrendingDown
+                    },
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = if (diff >= 0L) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    if (diff >= 0L) {
+                        "Önceki aya göre ${MoneyFormatter.format(diff)} daha iyi"
+                    } else {
+                        "Önceki aya göre ${MoneyFormatter.format(diff.absoluteValue)} daha düşük"
+                    },
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
         }
@@ -137,56 +300,145 @@ private fun SixMonthTrendCard(trend: List<MonthlyTrendPoint>) {
 }
 
 @Composable
-private fun TrendBar(label: String, amount: Long, progress: Float, color: Color) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, style = MaterialTheme.typography.bodySmall)
-            Text(MoneyFormatter.format(amount), style = MaterialTheme.typography.bodySmall)
+private fun RatioMetrics(summary: MonthlyBudgetSummary) {
+    val income = summary.totalIncomeAmount
+    val savingRate = if (income > 0L) summary.savingGoalAmount * 100 / income else 0L
+    val expenseRate = if (income > 0L) summary.totalExpenseAmount * 100 / income else 0L
+    val fixedRate = if (income > 0L) summary.projectedFixedPaymentsAmount * 100 / income else 0L
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MetricTile(
+                label = "Tasarruf oranı",
+                value = "%$savingRate",
+                supportingText = MoneyFormatter.format(summary.savingGoalAmount),
+                modifier = Modifier.weight(1f)
+            )
+            MetricTile(
+                label = "Harcama oranı",
+                value = "%$expenseRate",
+                supportingText = MoneyFormatter.format(summary.totalExpenseAmount),
+                modifier = Modifier.weight(1f),
+                valueColor = if (expenseRate > 80L) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
+            )
         }
-        LinearProgressIndicator(
-            progress = { progress.coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth(),
-            color = color
+        MetricTile(
+            label = "Sabit ödeme yükü",
+            value = "%$fixedRate",
+            supportingText = "${MoneyFormatter.format(summary.projectedFixedPaymentsAmount)} planlı ödeme",
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
 
 @Composable
-fun ReportSummaryCard(summary: MonthlyBudgetSummary) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            ReportRow("Maaş", MoneyFormatter.format(summary.salaryAmount))
-            ReportRow("Ek Gelirler", MoneyFormatter.format(summary.additionalIncomeAmount))
-            ReportRow("Toplam Gelir", MoneyFormatter.format(summary.totalIncomeAmount), fontWeight = FontWeight.Bold)
-            ReportRow("Tasarruf Hedefi", MoneyFormatter.format(summary.savingGoalAmount))
-            ReportRow("Toplam Harcama", MoneyFormatter.format(summary.totalExpenseAmount), Color.Red)
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            ReportRow("Abonelikler Toplamı", MoneyFormatter.format(summary.subscriptionPlannedAmount))
-            ReportRow("Harcamalara İşlenen Abonelikler", MoneyFormatter.format(summary.subscriptionPaidAmount))
-            ReportRow("Planlanan / Henüz İşlenmeyen Abonelikler", MoneyFormatter.format(summary.subscriptionUnpaidPlannedAmount))
-            ReportRow("Kredi Ödemeleri", MoneyFormatter.format(summary.loanPaymentAmount))
-            ReportRow("Sabit Giderler", MoneyFormatter.format(summary.fixedExpenseAmount))
-            ReportRow("Toplam Planlı Sabit Ödeme", MoneyFormatter.format(summary.projectedFixedPaymentsAmount), fontWeight = FontWeight.Bold)
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            ReportRow("Birikim Önerisi", MoneyFormatter.format(summary.suggestedSavingAmount), fontWeight = FontWeight.Bold)
-            ReportRow("Kalan", MoneyFormatter.format(summary.remainingAfterSaving), fontWeight = FontWeight.Bold)
-            ReportRow("Sabit Ödemeler Sonrası Kalan", MoneyFormatter.format(summary.remainingAfterFixedPayments), fontWeight = FontWeight.Bold)
+private fun TrendChartCard(trend: List<MonthlyTrendPoint>) {
+    val incomeColor = MaterialTheme.colorScheme.primary
+    val expenseColor = MaterialTheme.colorScheme.error
+    val maxAmount = trend.maxOfOrNull { maxOf(it.incomeAmount, it.expenseAmount) }
+        ?.coerceAtLeast(1L) ?: 1L
+
+    FinanceCard {
+        Column(Modifier.padding(16.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                ChartLegend("Gelir", incomeColor)
+                ChartLegend("Harcama", expenseColor)
+            }
+            Spacer(Modifier.height(18.dp))
+            Canvas(Modifier.fillMaxWidth().height(150.dp)) {
+                if (trend.size < 2) return@Canvas
+                val stepX = size.width / (trend.size - 1)
+                val usableHeight = size.height - 12.dp.toPx()
+
+                fun buildPath(amount: (MonthlyTrendPoint) -> Long): Path {
+                    val path = Path()
+                    trend.forEachIndexed { index, point ->
+                        val x = stepX * index
+                        val y = usableHeight -
+                            (amount(point).toFloat() / maxAmount.toFloat() * usableHeight)
+                        if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    }
+                    return path
+                }
+
+                drawLine(
+                    color = Color.Gray.copy(alpha = 0.2f),
+                    start = Offset(0f, usableHeight),
+                    end = Offset(size.width, usableHeight),
+                    strokeWidth = 1.dp.toPx()
+                )
+                drawPath(
+                    buildPath { it.incomeAmount },
+                    color = incomeColor,
+                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                )
+                drawPath(
+                    buildPath { it.expenseAmount },
+                    color = expenseColor,
+                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                )
+                trend.forEachIndexed { index, point ->
+                    val x = stepX * index
+                    val incomeY = usableHeight -
+                        (point.incomeAmount.toFloat() / maxAmount.toFloat() * usableHeight)
+                    val expenseY = usableHeight -
+                        (point.expenseAmount.toFloat() / maxAmount.toFloat() * usableHeight)
+                    drawCircle(incomeColor, 4.dp.toPx(), Offset(x, incomeY))
+                    drawCircle(expenseColor, 4.dp.toPx(), Offset(x, expenseY))
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                trend.forEach {
+                    Text(
+                        DateUtils.formatMonthYear(it.month).take(3),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-fun ComparisonCard(current: MonthlyBudgetSummary, previous: MonthlyBudgetSummary) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            val diff = current.totalExpenseAmount - previous.totalExpenseAmount
-            val diffText = if (diff > 0) "+${MoneyFormatter.format(diff)}" else MoneyFormatter.format(diff)
-            val color = if (diff > 0) Color.Red else Color(0xFF4CAF50)
-            
-            ReportRow("Harcama Değişimi", diffText, color, FontWeight.Bold)
+private fun ChartLegend(label: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).background(color, CircleShape))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun ExpenseSummaryHeader(
+    current: MonthlyBudgetSummary,
+    previous: MonthlyBudgetSummary
+) {
+    val diff = current.totalExpenseAmount - previous.totalExpenseAmount
+    FinanceCard {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                text = if (diff > 0) "Geçen aya göre daha fazla harcadınız." else "Geçen aya göre daha az harcadınız.",
-                style = MaterialTheme.typography.bodySmall
+                "Bu ay toplam harcama",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                MoneyFormatter.format(current.totalExpenseAmount),
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Text(
+                when {
+                    previous.totalExpenseAmount == 0L -> "Önceki ay karşılaştırması bulunmuyor"
+                    diff > 0L -> "Geçen aya göre ${MoneyFormatter.format(diff)} artış"
+                    else -> "Geçen aya göre ${MoneyFormatter.format(diff.absoluteValue)} azalış"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (diff > 0L) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -197,41 +449,59 @@ fun DecisionSummaryCard(
     current: MonthlyBudgetSummary,
     previous: MonthlyBudgetSummary
 ) {
-    val currentCategories = current.categorySummaries.associateBy { it.categoryId }
-    val topIncrease = currentCategories.values
+    val previousCategories = previous.categorySummaries.associateBy { it.categoryId }
+    val topChange = current.categorySummaries
         .map { category ->
-            val previousAmount = previous.categorySummaries.firstOrNull { it.categoryId == category.categoryId }?.amount ?: 0L
-            category to (category.amount - previousAmount)
+            category to (category.amount - (previousCategories[category.categoryId]?.amount ?: 0L))
         }
-        .filter { it.second > 0L }
         .maxByOrNull { it.second }
-    val fixedPaymentDiff = current.projectedFixedPaymentsAmount - previous.projectedFixedPaymentsAmount
-    val savingGap = current.savingGoalAmount - current.suggestedSavingAmount
-    val cashWarning = current.remainingAfterSavingAndFixedPayments < 0L
+    val result = current.remainingAfterSavingAndFixedPayments
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (topIncrease != null) {
-                ReportRow("En Çok Artan Kategori", "${topIncrease.first.categoryName} +${MoneyFormatter.format(topIncrease.second)}", Color.Red, FontWeight.Bold)
-            } else {
-                Text("Kategori artışı dikkat çekmiyor.", style = MaterialTheme.typography.bodySmall)
-            }
-            val diffText = if (fixedPaymentDiff > 0) "+${MoneyFormatter.format(fixedPaymentDiff)}" else MoneyFormatter.format(fixedPaymentDiff)
-            ReportRow("Planlı Ödeme Farkı", diffText, if (fixedPaymentDiff > 0) Color.Red else Color(0xFF4CAF50), FontWeight.Bold)
-            ReportRow(
-                "Birikim Hedefi Sapması",
-                if (savingGap > 0L) "${MoneyFormatter.format(savingGap)} hedef öneriden yüksek" else "Hedef öneriyle uyumlu",
-                if (savingGap > 0L) Color.Red else Color(0xFF4CAF50)
-            )
-            Text(
-                text = if (cashWarning) {
-                    "Kalan nakit negatif. Bu ay hedef, sabit ödemeler veya harcama planı gözden geçirilmeli."
+    FinanceCard {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            InsightRow(
+                title = if (result >= 0L) "Plan sürdürülebilir görünüyor" else "Aylık plan açık veriyor",
+                text = if (result >= 0L) {
+                    "Birikim ve planlı ödemelerden sonra ${MoneyFormatter.format(result)} kalıyor."
                 } else {
-                    "Kalan nakit pozitif. Bu ay plan sürdürülebilir görünüyor."
+                    "Planlanan tüm kalemlerden sonra ${MoneyFormatter.format(result.absoluteValue)} açık oluşuyor."
                 },
+                positive = result >= 0L
+            )
+            if (topChange != null && topChange.second != 0L) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                InsightRow(
+                    title = "${topChange.first.categoryName} öne çıkıyor",
+                    text = if (topChange.second > 0L) {
+                        "Geçen aya göre ${MoneyFormatter.format(topChange.second)} daha fazla harcandı."
+                    } else {
+                        "Geçen aya göre ${MoneyFormatter.format(topChange.second.absoluteValue)} daha az harcandı."
+                    },
+                    positive = topChange.second <= 0L
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun InsightRow(title: String, text: String, positive: Boolean) {
+    Row(verticalAlignment = Alignment.Top) {
+        Icon(
+            Icons.Default.Lightbulb,
+            contentDescription = null,
+            tint = if (positive) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (cashWarning) Color.Red else Color(0xFF4CAF50),
-                fontWeight = FontWeight.Bold
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -239,90 +509,184 @@ fun DecisionSummaryCard(
 
 @Composable
 fun NetWorthCard(amount: Long) {
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-        Box(modifier = Modifier.padding(16.dp), contentAlignment = Alignment.Center) {
-            Text(text = MoneyFormatter.format(amount), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+    FinanceCard(containerColor = MaterialTheme.colorScheme.primaryContainer) {
+        Row(
+            Modifier.padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.AutoGraph,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                MoneyFormatter.format(amount),
+                style = MaterialTheme.typography.headlineMedium
+            )
         }
     }
 }
 
 @Composable
 private fun SpendingChannelsCard(summary: MonthlyBudgetSummary) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ReportRow("Nakit / banka harcamaları", MoneyFormatter.format(summary.directExpenseAmount))
-            ReportRow("Kredi kartı ekstre harcamaları", MoneyFormatter.format(summary.creditCardPaymentAmount))
-            HorizontalDivider()
-            ReportRow(
-                "Toplam harcama",
-                MoneyFormatter.format(summary.totalExpenseAmount),
-                fontWeight = FontWeight.Bold
+    val total = summary.totalExpenseAmount.coerceAtLeast(1L)
+    FinanceCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            ChannelBar(
+                "Nakit / banka",
+                summary.directExpenseAmount,
+                summary.directExpenseAmount.toFloat() / total
+            )
+            ChannelBar(
+                "Kredi kartı ekstresi",
+                summary.creditCardPaymentAmount,
+                summary.creditCardPaymentAmount.toFloat() / total
             )
         }
     }
 }
 
 @Composable
-private fun CategoryReportRow(summary: CategorySummary, totalExpenseAmount: Long) {
+private fun ChannelBar(label: String, amount: Long, progress: Float) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            Text(MoneyFormatter.format(amount), style = MaterialTheme.typography.titleSmall)
+        }
+        LinearProgressIndicator(
+            progress = { progress.coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth().height(7.dp),
+            trackColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun CashFlowWaterfall(summary: MonthlyBudgetSummary) {
+    FinanceCard {
+        Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+            FlowRow("Toplam gelir", summary.totalIncomeAmount, positive = true)
+            FlowRow("Harcamalar", -summary.totalExpenseAmount, positive = false)
+            FlowRow("Planlı ödemeler", -summary.projectedFixedPaymentsAmount, positive = false)
+            FlowRow("Birikim hedefi", -summary.savingGoalAmount, positive = false)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Ay sonu kalan", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    MoneyFormatter.format(summary.remainingAfterSavingAndFixedPayments),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (summary.remainingAfterSavingAndFixedPayments >= 0L) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FlowRow(label: String, amount: Long, positive: Boolean) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            (if (amount > 0L) "+" else "") + MoneyFormatter.format(amount),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (positive) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+private fun RemainingTrendCard(trend: List<MonthlyTrendPoint>) {
+    val maxAbsolute = trend.maxOfOrNull { it.remainingAmount.absoluteValue }?.coerceAtLeast(1L) ?: 1L
+    FinanceCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            trend.forEach { point ->
+                val positive = point.remainingAmount >= 0L
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(
+                            DateUtils.formatMonthYear(point.month),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            MoneyFormatter.format(point.remainingAmount),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = if (positive) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.error
+                        )
+                    }
+                    LinearProgressIndicator(
+                        progress = {
+                            point.remainingAmount.absoluteValue.toFloat() / maxAbsolute.toFloat()
+                        },
+                        modifier = Modifier.fillMaxWidth().height(6.dp),
+                        color = if (positive) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.error,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryReportRow(
+    summary: CategorySummary,
+    totalExpenseAmount: Long
+) {
     val share = if (totalExpenseAmount > 0L) {
         summary.amount.toFloat() / totalExpenseAmount
     } else {
         0f
     }
-    val budgetProgress = summary.percentage
-    val progress = budgetProgress ?: share
-    val progressColor = when {
-        budgetProgress != null && budgetProgress > 1f -> MaterialTheme.colorScheme.error
-        budgetProgress != null && budgetProgress >= 0.8f -> MaterialTheme.colorScheme.tertiary
+    val progress = summary.percentage ?: share
+    val color = when {
+        summary.percentage != null && summary.percentage > 1f -> MaterialTheme.colorScheme.error
+        summary.percentage != null && summary.percentage >= 0.8f -> MaterialTheme.colorScheme.tertiary
         else -> Color(summary.colorValue)
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+    FinanceCard {
+        Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = IconMapper.getIcon(summary.iconName),
-                    contentDescription = null,
-                    tint = Color(summary.colorValue)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(summary.categoryName, fontWeight = FontWeight.Bold)
-                    val detail = if (summary.budgetLimit != null) {
-                        "Bütçe: ${MoneyFormatter.format(summary.amount)} / ${MoneyFormatter.format(summary.budgetLimit)}"
-                    } else {
-                        "Toplam harcamanın %${(share * 100).toInt()}\'i"
-                    }
+                Box(
+                    Modifier
+                        .size(38.dp)
+                        .background(Color(summary.colorValue).copy(alpha = 0.12f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        IconMapper.getIcon(summary.iconName),
+                        contentDescription = null,
+                        tint = Color(summary.colorValue),
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+                Spacer(Modifier.width(11.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(summary.categoryName, style = MaterialTheme.typography.titleSmall)
                     Text(
-                        text = detail,
-                        style = MaterialTheme.typography.bodySmall,
+                        summary.budgetLimit?.let {
+                            "Bütçe ${MoneyFormatter.format(summary.amount)} / ${MoneyFormatter.format(it)}"
+                        } ?: "Toplamın %${(share * 100).toInt()}",
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(MoneyFormatter.format(summary.amount), fontWeight = FontWeight.Bold)
+                Text(MoneyFormatter.format(summary.amount), style = MaterialTheme.typography.titleSmall)
             }
             LinearProgressIndicator(
                 progress = { progress.coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth(),
-                color = progressColor
+                modifier = Modifier.fillMaxWidth().height(6.dp),
+                color = color,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
         }
-    }
-}
-
-@Composable
-fun ReportRow(label: String, value: String, color: Color = Color.Unspecified, fontWeight: FontWeight = FontWeight.Normal) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(text = label, style = MaterialTheme.typography.bodyMedium)
-        Text(text = value, style = MaterialTheme.typography.bodyMedium, color = color, fontWeight = fontWeight)
     }
 }

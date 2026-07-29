@@ -30,9 +30,10 @@ class DashboardViewModel @Inject constructor(
         .flatMapLatest { month ->
             combine(
                 calculator.getSummaryForMonth(month),
+                calculator.getSummaryForMonth(month.minusMonths(1)),
                 debtRepository.observeOpenDebtRecords()
-            ) { summary, debts ->
-                DashboardUiState.Success(summary, debts)
+            ) { summary, previousSummary, debts ->
+                DashboardUiState.Success(summary, previousSummary, debts)
             }
         }
         .stateIn(
@@ -73,6 +74,10 @@ class DashboardViewModel @Inject constructor(
 
 sealed interface DashboardUiState {
     data object Loading : DashboardUiState
-    data class Success(val summary: MonthlyBudgetSummary, val openDebts: List<DebtRecord>) : DashboardUiState
+    data class Success(
+        val summary: MonthlyBudgetSummary,
+        val previousSummary: MonthlyBudgetSummary,
+        val openDebts: List<DebtRecord>
+    ) : DashboardUiState
     data class Error(val message: String) : DashboardUiState
 }

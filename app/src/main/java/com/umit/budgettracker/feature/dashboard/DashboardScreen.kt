@@ -1,12 +1,55 @@
 package com.umit.budgettracker.feature.dashboard
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -14,12 +57,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.umit.budgettracker.core.domain.model.BudgetWarning
 import com.umit.budgettracker.core.domain.model.CategorySummary
+import com.umit.budgettracker.core.domain.model.DebtType
+import com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary
 import com.umit.budgettracker.core.navigation.Screen
+import com.umit.budgettracker.core.navigation.navigateToTopLevelDestination
 import com.umit.budgettracker.core.ui.IconMapper
+import com.umit.budgettracker.core.ui.components.FinanceCard
+import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
+import com.umit.budgettracker.core.ui.components.MetricTile
+import com.umit.budgettracker.core.ui.components.StatusPill
 import com.umit.budgettracker.core.util.DateUtils
 import com.umit.budgettracker.core.util.MoneyFormatter
 import java.time.YearMonth
+import kotlin.math.absoluteValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,265 +84,160 @@ fun DashboardScreen(
     var showSavingGoalDialog by remember { mutableStateOf(false) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("Özet") },
+                title = {
+                    Column {
+                        Text("Genel Bakış", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "Finansal durumun tek ekranda",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 actions = {
                     IconButton(onClick = { navController.navigate(Screen.CashFlow.route) }) {
                         Icon(Icons.Default.Event, contentDescription = "Nakit Akışı")
                     }
-                    MonthSelector(
-                        selectedMonth = selectedMonth,
-                        onMonthChange = { viewModel.previousMonth() },
-                        onNextMonth = { viewModel.nextMonth() }
-                    )
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { padding ->
         when (val state = uiState) {
-            is DashboardUiState.Loading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            DashboardUiState.Loading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(padding),
+                    contentAlignment = Alignment.Center
+                ) {
                     CircularProgressIndicator()
                 }
             }
+
             is DashboardUiState.Success -> {
                 val summary = state.summary
-                val isFuture = selectedMonth.isAfter(YearMonth.now())
-
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.fillMaxSize().padding(padding),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    if (isFuture) {
-                        item {
-                            Surface(
-                                color = MaterialTheme.colorScheme.tertiaryContainer,
-                                shape = MaterialTheme.shapes.small
-                            ) {
-                                Text(
-                                    text = "Gelecek ay projeksiyonu",
-                                    modifier = Modifier.padding(8.dp).fillMaxWidth(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
+                    item {
+                        MonthSelector(
+                            selectedMonth = selectedMonth,
+                            onMonthChange = viewModel::previousMonth,
+                            onNextMonth = viewModel::nextMonth,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    item {
+                        BalanceHeroCard(
+                            summary = summary,
+                            previousSummary = state.previousSummary,
+                            isFuture = selectedMonth.isAfter(YearMonth.now())
+                        )
+                    }
+
+                    item {
+                        KeyMetrics(summary)
                     }
 
                     if (summary.warnings.isNotEmpty()) {
-                        items(summary.warnings) { warning ->
-                            Surface(
-                                color = MaterialTheme.colorScheme.errorContainer,
-                                shape = MaterialTheme.shapes.small
-                            ) {
-                                Row(modifier = Modifier.padding(8.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(text = warning.message, style = MaterialTheme.typography.labelSmall)
-                                }
-                            }
-                        }
-                    }
-
-                    item { Spacer(modifier = Modifier.height(8.dp)) }
-                    item {
-                        SummaryCard(
-                            title = "Maaş",
-                            amount = MoneyFormatter.format(summary.salaryAmount),
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            onClick = { navController.navigate(Screen.SalaryManagement.route) }
-                        )
-                    }
-                    item {
-                        SummaryCard(
-                            title = "Ek Gelirler",
-                            amount = MoneyFormatter.format(summary.additionalIncomeAmount),
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            onClick = { navController.navigate(Screen.Income.route) }
-                        )
-                    }
-                    item {
-                        SummaryCard(
-                            title = "Toplam Gelir",
-                            amount = MoneyFormatter.format(summary.totalIncomeAmount),
-                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                        )
-                    }
-                    item {
-                        SummaryCard(
-                            title = "Birikim Hedefi",
-                            amount = MoneyFormatter.format(summary.savingGoalAmount),
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            onClick = { showSavingGoalDialog = true }
-                        )
-                    }
-
-                    item {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(text = "Net Nakit", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(text = "Harcamalar Sonrası:", style = MaterialTheme.typography.bodySmall)
-                                    Text(text = MoneyFormatter.format(summary.remainingBeforeSaving), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                                }
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(text = "Planlı Ödemeler Sonrası:", style = MaterialTheme.typography.bodySmall)
-                                    Text(text = MoneyFormatter.format(summary.remainingAfterFixedPayments), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                                }
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(text = "Hedef Sonrası:", style = MaterialTheme.typography.bodySmall)
-                                    Text(text = MoneyFormatter.format(summary.remainingAfterSavingAndFixedPayments), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-                    
-                    item {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "Harcamalar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            TextButton(onClick = { navController.navigate(Screen.CategoryBudgets.route) }) {
-                                Text("Bütçeler")
-                            }
-                        }
-                    }
-
-                    item {
-                        SummaryCard(
-                            title = "Bu Ay Toplam Harcama",
-                            amount = MoneyFormatter.format(summary.totalExpenseAmount),
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    }
-
-                    if (summary.categorySummaries.isNotEmpty()) {
                         item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "En Çok Harcama Yapılan Kategoriler",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                TextButton(onClick = { navController.navigate(Screen.Reports.route) }) {
-                                    Text("Tümü")
+                            InsightCard(summary.warnings.first())
+                        }
+                    } else {
+                        item {
+                            PositiveInsightCard(summary, state.previousSummary)
+                        }
+                    }
+
+                    item {
+                        FinanceSectionHeader(
+                            title = "Bu ayın planı",
+                            subtitle = "Henüz gerçekleşmemiş düzenli yükümlülükler",
+                            action = {
+                                TextButton(onClick = { navController.navigate(Screen.CashFlow.route) }) {
+                                    Text("Takvim")
                                 }
                             }
-                        }
-                        items(summary.categorySummaries.take(5)) { category ->
+                        )
+                    }
+                    item {
+                        PlannedPaymentsCard(summary)
+                    }
+
+                    item {
+                        FinanceSectionHeader(
+                            title = "Harcama dağılımı",
+                            subtitle = "Bütçeni en çok etkileyen kategoriler",
+                            action = {
+                                TextButton(
+                                    onClick = {
+                                        navController.navigateToTopLevelDestination(Screen.Reports)
+                                    }
+                                ) {
+                                    Text("Rapor")
+                                }
+                            }
+                        )
+                    }
+                    if (summary.categorySummaries.isEmpty()) {
+                        item { EmptyExpensesCard() }
+                    } else {
+                        items(summary.categorySummaries.take(4)) { category ->
                             CategorySummaryRow(category, summary.totalExpenseAmount)
                         }
                     }
-                    
-                    item {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(text = "Kart Özetleri", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(text = "Bu Ay Kartla Yapılan Harcama:", style = MaterialTheme.typography.bodySmall)
-                                    Text(text = MoneyFormatter.format(summary.calendarCreditCardSpendingAmount), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                                }
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(text = "Ödenecek Kart Ekstreleri:", style = MaterialTheme.typography.bodySmall)
-                                    Text(text = MoneyFormatter.format(summary.creditCardPaymentAmount), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-                                }
-                            }
-                        }
-                    }
 
                     item {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "Planlanan Sabit Ödemeler", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            TextButton(onClick = { navController.navigate(Screen.DebtTracking.route) }) {
-                                Text("Borçlar")
+                        SavingGoalCard(
+                            summary = summary,
+                            onEdit = { showSavingGoalDialog = true },
+                            onApplySuggestion = {
+                                viewModel.applySuggestedSaving(summary.suggestedSavingAmount)
                             }
-                        }
-                    }
-
-                    item {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            SummaryCard(
-                                title = "Abonelikler",
-                                amount = MoneyFormatter.format(summary.subscriptionPlannedAmount),
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.weight(1f),
-                                onClick = { navController.navigate(Screen.Subscriptions.route) }
-                            )
-                            SummaryCard(
-                                title = "Kredi Ödemeleri",
-                                amount = MoneyFormatter.format(summary.loanPaymentAmount),
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.weight(1f),
-                                onClick = { navController.navigate(Screen.Loans.route) }
-                            )
-                        }
-                    }
-                    item {
-                        SummaryCard(
-                            title = "Sabit Giderler",
-                            amount = MoneyFormatter.format(summary.fixedExpenseAmount),
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            onClick = { navController.navigate(Screen.FixedExpenses.route) }
                         )
                     }
 
-                    item {
-                        Text(text = "Projeksiyon", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    }
-
-                    item {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(text = "Sabit Ödemeler Sonrası Kalan:", style = MaterialTheme.typography.bodySmall)
-                                    Text(text = MoneyFormatter.format(summary.remainingAfterFixedPayments), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                                }
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(text = "Birikim + Sabit Ödemeler Sonrası:", style = MaterialTheme.typography.bodySmall)
-                                    Text(text = MoneyFormatter.format(summary.remainingAfterSavingAndFixedPayments), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                                }
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(text = "Birikim Önerisi:", style = MaterialTheme.typography.bodySmall)
-                                    Text(text = MoneyFormatter.format(summary.suggestedSavingAmount), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                }
-                                TextButton(
-                                    enabled = summary.suggestedSavingAmount > 0,
-                                    onClick = { viewModel.applySuggestedSaving(summary.suggestedSavingAmount) },
-                                    modifier = Modifier.align(Alignment.End)
-                                ) {
-                                    Text("Öneriyi hedef yap")
-                                }
-                            }
-                        }
-                    }
-
-                    if (summary.categorySummaries.isEmpty()) {
+                    if (state.openDebts.isNotEmpty()) {
                         item {
-                            Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                                Text(text = "Bu ay henüz harcama yok.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val owed = state.openDebts
+                                .filter { it.type == DebtType.I_OWE }
+                                .sumOf { it.amount }
+                            val receivable = state.openDebts
+                                .filter { it.type == DebtType.OWED_TO_ME }
+                                .sumOf { it.amount }
+                            FinanceSectionHeader(
+                                title = "Borç ve alacak",
+                                subtitle = "${state.openDebts.size} açık kayıt"
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            FinanceCard {
+                                Row(
+                                    Modifier.padding(16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    MetricTile(
+                                        label = "Ödenecek",
+                                        value = MoneyFormatter.format(owed),
+                                        modifier = Modifier.weight(1f),
+                                        valueColor = MaterialTheme.colorScheme.error
+                                    )
+                                    MetricTile(
+                                        label = "Alınacak",
+                                        value = MoneyFormatter.format(receivable),
+                                        modifier = Modifier.weight(1f),
+                                        valueColor = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
                         }
                     }
-                    item { Spacer(modifier = Modifier.height(16.dp)) }
                 }
 
                 if (showSavingGoalDialog) {
@@ -304,11 +251,311 @@ fun DashboardScreen(
                     )
                 }
             }
+
             is DashboardUiState.Error -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(text = state.message, color = MaterialTheme.colorScheme.error)
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(padding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(state.message, color = MaterialTheme.colorScheme.error)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun BalanceHeroCard(
+    summary: MonthlyBudgetSummary,
+    previousSummary: MonthlyBudgetSummary,
+    isFuture: Boolean
+) {
+    val balance = summary.remainingAfterSavingAndFixedPayments
+    val difference = balance - previousSummary.remainingAfterSavingAndFixedPayments
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (isFuture) "Plan sonrası beklenen" else "Plan sonrası kullanılabilir",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.76f)
+                )
+                if (isFuture) {
+                    StatusPill(
+                        text = "PROJEKSİYON",
+                        containerColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.14f),
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+            }
+            Text(
+                MoneyFormatter.format(balance),
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                when {
+                    previousSummary.totalIncomeAmount == 0L && previousSummary.totalExpenseAmount == 0L ->
+                        "Karşılaştırma için önceki ay verisi bulunmuyor"
+                    difference >= 0L ->
+                        "Geçen aya göre ${MoneyFormatter.format(difference)} daha iyi"
+                    else ->
+                        "Geçen aya göre ${MoneyFormatter.format(difference.absoluteValue)} daha düşük"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f)
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                HeroMetric("Gelir", MoneyFormatter.format(summary.totalIncomeAmount))
+                HeroMetric("Harcama", MoneyFormatter.format(summary.totalExpenseAmount))
+                HeroMetric("Planlı", MoneyFormatter.format(summary.projectedFixedPaymentsAmount))
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroMetric(label: String, value: String) {
+    Column {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.66f)
+        )
+        Spacer(Modifier.height(3.dp))
+        Text(value, style = MaterialTheme.typography.titleSmall)
+    }
+}
+
+@Composable
+private fun KeyMetrics(summary: MonthlyBudgetSummary) {
+    val income = summary.totalIncomeAmount
+    val savingRate = if (income > 0L) summary.savingGoalAmount * 100 / income else 0L
+    val expenseRate = if (income > 0L) summary.totalExpenseAmount * 100 / income else 0L
+    val fixedRate = if (income > 0L) summary.projectedFixedPaymentsAmount * 100 / income else 0L
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        MetricTile(
+            label = "Birikim",
+            value = "%$savingRate",
+            modifier = Modifier.weight(1f),
+            supportingText = "gelir oranı"
+        )
+        MetricTile(
+            label = "Harcama",
+            value = "%$expenseRate",
+            modifier = Modifier.weight(1f),
+            supportingText = "gelir oranı",
+            valueColor = if (expenseRate > 80) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+        )
+        MetricTile(
+            label = "Sabit yük",
+            value = "%$fixedRate",
+            modifier = Modifier.weight(1f),
+            supportingText = "gelir oranı"
+        )
+    }
+}
+
+@Composable
+private fun InsightCard(warning: BudgetWarning) {
+    FinanceCard(containerColor = MaterialTheme.colorScheme.errorContainer) {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Icon(
+                Icons.Default.Warning,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(21.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text("Bu ay dikkat et", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(3.dp))
+                Text(warning.message, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PositiveInsightCard(
+    summary: MonthlyBudgetSummary,
+    previousSummary: MonthlyBudgetSummary
+) {
+    val diff = summary.totalExpenseAmount - previousSummary.totalExpenseAmount
+    FinanceCard(containerColor = MaterialTheme.colorScheme.primaryContainer) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+            Icon(
+                Icons.Default.Lightbulb,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(21.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text("Aylık içgörü", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    when {
+                        previousSummary.totalExpenseAmount == 0L ->
+                            "Harcama düzenin oluştukça burada karşılaştırmalı sonuçlar göreceksin."
+                        diff <= 0L ->
+                            "Harcamaların geçen aya göre ${MoneyFormatter.format(diff.absoluteValue)} azaldı."
+                        else ->
+                            "Harcamaların geçen aya göre ${MoneyFormatter.format(diff)} arttı."
+                    },
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlannedPaymentsCard(summary: MonthlyBudgetSummary) {
+    FinanceCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            PaymentRow("Kredi kartı ekstreleri", summary.creditCardPaymentAmount)
+            PaymentRow("Abonelikler", summary.subscriptionPlannedAmount)
+            PaymentRow("Kredi ödemeleri", summary.loanPaymentAmount)
+            PaymentRow("Sabit giderler", summary.fixedExpenseAmount)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Toplam planlı ödeme", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    MoneyFormatter.format(summary.projectedFixedPaymentsAmount),
+                    style = MaterialTheme.typography.titleSmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaymentRow(label: String, amount: Long) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Text(MoneyFormatter.format(amount), style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun SavingGoalCard(
+    summary: MonthlyBudgetSummary,
+    onEdit: () -> Unit,
+    onApplySuggestion: () -> Unit
+) {
+    val available = summary.remainingAfterFixedPayments.coerceAtLeast(0L)
+    val progress = if (summary.savingGoalAmount > 0L) {
+        (available.toFloat() / summary.savingGoalAmount).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    FinanceCard {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Icon(
+                            Icons.Default.Savings,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(9.dp).size(20.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text("Birikim hedefi", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Bu ay için ayırdığın tutar",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                TextButton(onClick = onEdit) { Text("Düzenle") }
+            }
+            Text(
+                MoneyFormatter.format(summary.savingGoalAmount),
+                style = MaterialTheme.typography.headlineMedium
+            )
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth().height(7.dp),
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+            if (summary.suggestedSavingAmount > 0L &&
+                summary.suggestedSavingAmount != summary.savingGoalAmount
+            ) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Önerilen: ${MoneyFormatter.format(summary.suggestedSavingAmount)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(onClick = onApplySuggestion) { Text("Uygula") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyExpensesCard() {
+    FinanceCard {
+        Column(
+            Modifier.fillMaxWidth().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                Icons.Default.BarChart,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            Text("Bu ay henüz harcama yok", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "İlk işlemini eklediğinde dağılım burada görünür.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -317,46 +564,30 @@ fun DashboardScreen(
 fun MonthSelector(
     selectedMonth: YearMonth,
     onMonthChange: () -> Unit,
-    onNextMonth: () -> Unit
+    onNextMonth: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onMonthChange) {
-            Icon(Icons.Default.ChevronLeft, contentDescription = "Önceki Ay")
-        }
-        Text(
-            text = DateUtils.formatMonthYear(selectedMonth),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Bold
-        )
-        IconButton(onClick = onNextMonth) {
-            Icon(Icons.Default.ChevronRight, contentDescription = "Sonraki Ay")
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SummaryCard(
-    title: String,
-    amount: String,
-    containerColor: Color,
-    modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        onClick = onClick ?: {}
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = title, style = MaterialTheme.typography.labelMedium)
-                if (onClick != null) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(12.dp))
-                }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            IconButton(onClick = onMonthChange) {
+                Icon(Icons.Default.ChevronLeft, contentDescription = "Önceki Ay")
             }
-            Text(text = amount, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                DateUtils.formatMonthYear(selectedMonth),
+                style = MaterialTheme.typography.titleSmall
+            )
+            IconButton(onClick = onNextMonth) {
+                Icon(Icons.Default.ChevronRight, contentDescription = "Sonraki Ay")
+            }
         }
     }
 }
@@ -368,58 +599,55 @@ fun CategorySummaryRow(summary: CategorySummary, totalExpenseAmount: Long) {
     } else {
         0f
     }
-    val budgetProgress = summary.percentage
-    val progress = budgetProgress ?: share
+    val progress = summary.percentage ?: share
     val progressColor = when {
-        budgetProgress != null && budgetProgress > 1f -> MaterialTheme.colorScheme.error
-        budgetProgress != null && budgetProgress >= 0.8f -> MaterialTheme.colorScheme.tertiary
+        summary.percentage != null && summary.percentage > 1f -> MaterialTheme.colorScheme.error
+        summary.percentage != null && summary.percentage >= 0.8f -> MaterialTheme.colorScheme.tertiary
         else -> Color(summary.colorValue)
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+    FinanceCard {
+        Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .padding(8.dp),
+                        .size(38.dp)
+                        .background(
+                            color = Color(summary.colorValue).copy(alpha = 0.12f),
+                            shape = CircleShape
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         IconMapper.getIcon(summary.iconName),
                         contentDescription = null,
-                        tint = Color(summary.colorValue)
+                        tint = Color(summary.colorValue),
+                        modifier = Modifier.size(19.dp)
                     )
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = summary.categoryName, style = MaterialTheme.typography.bodyLarge)
-                    val detail = if (summary.budgetLimit != null) {
-                        "${MoneyFormatter.format(summary.amount)} / ${MoneyFormatter.format(summary.budgetLimit)}"
-                    } else {
-                        "Toplam harcamanın %${(share * 100).toInt()}\'i"
-                    }
+                Spacer(Modifier.width(11.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(summary.categoryName, style = MaterialTheme.typography.titleSmall)
                     Text(
-                        text = detail,
+                        if (summary.budgetLimit != null) {
+                            "${MoneyFormatter.format(summary.amount)} / ${MoneyFormatter.format(summary.budgetLimit)}"
+                        } else {
+                            "Toplam harcamanın %${(share * 100).toInt()}"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Text(
-                    text = MoneyFormatter.format(summary.amount),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold
+                    MoneyFormatter.format(summary.amount),
+                    style = MaterialTheme.typography.titleSmall
                 )
             }
             LinearProgressIndicator(
                 progress = { progress.coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth(),
-                color = progressColor
+                modifier = Modifier.fillMaxWidth().height(6.dp),
+                color = progressColor,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
         }
     }
@@ -432,32 +660,28 @@ fun SavingGoalDialog(
     onConfirm: (Long) -> Unit
 ) {
     var amountText by remember { mutableStateOf((currentAmount / 100).toString()) }
-    
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Birikim Hedefi Belirle") },
+        title = { Text("Birikim hedefi") },
         text = {
-            Column {
-                OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = it },
-                    label = { Text("Hedef Tutar (TL)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            OutlinedTextField(
+                value = amountText,
+                onValueChange = { amountText = it },
+                label = { Text("Hedef tutar (TL)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
         },
         confirmButton = {
-            TextButton(onClick = {
-                val amount = MoneyFormatter.parse(amountText) ?: 0L
-                onConfirm(amount)
+            Button(onClick = {
+                onConfirm(MoneyFormatter.parse(amountText) ?: 0L)
             }) {
                 Text("Kaydet")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Vazgeç")
-            }
+            TextButton(onClick = onDismiss) { Text("Vazgeç") }
         }
     )
 }

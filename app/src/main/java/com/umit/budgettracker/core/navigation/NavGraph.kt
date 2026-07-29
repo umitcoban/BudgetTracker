@@ -67,7 +67,7 @@ fun NavGraph(
             LoansScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.CashFlow.route) {
-            CashFlowScreen()
+            CashFlowScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.CategoryBudgets.route) {
             CategoryBudgetsScreen(onBack = { navController.popBackStack() })

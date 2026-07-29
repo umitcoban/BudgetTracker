@@ -16,9 +16,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -46,6 +48,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.umit.budgettracker.core.domain.model.Income
 import com.umit.budgettracker.core.domain.model.IncomeType
 import com.umit.budgettracker.core.util.MoneyFormatter
+import com.umit.budgettracker.core.ui.components.FinanceCard
+import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
 import com.umit.budgettracker.feature.dashboard.MonthSelector
 import java.time.LocalDate
 import java.time.YearMonth
@@ -101,20 +105,42 @@ fun IncomeScreen(
                 Text("Bu ay için ek gelir yok.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
+            val groupedIncomes = incomes
+                .groupBy { it.incomeDate }
+                .toSortedMap(compareByDescending { it })
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(incomes) { income ->
-                    IncomeRow(
-                        income = income,
-                        onEdit = {
-                            editingIncome = income
-                            showDialog = true
-                        },
-                        onDelete = { viewModel.deleteIncome(income) }
+                item {
+                    IncomeMonthSummary(incomes)
+                }
+                item {
+                    FinanceSectionHeader(
+                        title = "Gelir hareketleri",
+                        subtitle = "${incomes.size} kayıt"
                     )
+                }
+                groupedIncomes.forEach { (date, dayIncomes) ->
+                    item {
+                        Text(
+                            date.format(DateTimeFormatter.ofPattern("d MMMM")),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    items(dayIncomes) { income ->
+                        IncomeRow(
+                            income = income,
+                            onEdit = {
+                                editingIncome = income
+                                showDialog = true
+                            },
+                            onDelete = { viewModel.deleteIncome(income) }
+                        )
+                    }
                 }
             }
         }
@@ -140,15 +166,24 @@ private fun IncomeRow(
     onDelete: () -> Unit
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
 
-    Card(modifier = Modifier.fillMaxWidth(), onClick = onEdit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onEdit,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(income.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("${income.incomeDate} • ${income.type.toTurkishLabel()}", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    income.type.toTurkishLabel(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             Text(
                 text = MoneyFormatter.format(income.amount),
@@ -156,11 +191,36 @@ private fun IncomeRow(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Default.Edit, contentDescription = "Düzenle")
-            }
-            IconButton(onClick = { showDeleteConfirm = true }) {
-                Icon(Icons.Default.Delete, contentDescription = "Sil")
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Gelir seçenekleri")
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Düzenle") },
+                        onClick = {
+                            menuExpanded = false
+                            onEdit()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Sil", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            showDeleteConfirm = true
+                        }
+                    )
+                }
             }
         }
     }
@@ -186,6 +246,36 @@ private fun IncomeRow(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun IncomeMonthSummary(incomes: List<Income>) {
+    val total = incomes.sumOf { it.amount }
+    val largest = incomes.maxByOrNull { it.amount }
+    FinanceCard(containerColor = MaterialTheme.colorScheme.primaryContainer) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Text(
+                "Bu ay ek gelir",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                MoneyFormatter.format(total),
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                largest?.let {
+                    "En yüksek: ${it.title} · ${MoneyFormatter.format(it.amount)}"
+                } ?: "Henüz kayıt yok",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
