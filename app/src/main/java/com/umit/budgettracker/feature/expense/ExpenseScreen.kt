@@ -27,6 +27,8 @@ import androidx.navigation.NavController
 import com.umit.budgettracker.core.domain.model.*
 import com.umit.budgettracker.core.navigation.Screen
 import com.umit.budgettracker.core.ui.IconMapper
+import com.umit.budgettracker.core.ui.components.FinanceCard
+import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
 import com.umit.budgettracker.core.util.InstallmentUtils
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
@@ -98,20 +100,46 @@ fun ExpenseScreen(
                 Text(text = "Bu ay henüz harcama eklenmemiş.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
+            val groupedExpenses = expenses
+                .groupBy { it.expenseDate }
+                .toSortedMap(compareByDescending { it })
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(expenses) { expense ->
-                    ExpenseRow(
-                        expense = expense,
-                        onClick = {
-                            editingExpense = expense
-                            showDialog = true
-                        },
-                        onDelete = { viewModel.deleteExpense(expense) }
+                item {
+                    ExpenseMonthSummary(
+                        expenses = expenses,
+                        selectedMonth = selectedMonth,
+                        isFiltered = filter.isActive
                     )
+                }
+                item {
+                    FinanceSectionHeader(
+                        title = if (filter.isActive) "Filtrelenen işlemler" else "Harcama hareketleri",
+                        subtitle = "${expenses.size} işlem"
+                    )
+                }
+                groupedExpenses.forEach { (date, dayExpenses) ->
+                    item {
+                        Text(
+                            date.format(DateTimeFormatter.ofPattern("d MMMM")),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    items(dayExpenses) { expense ->
+                        ExpenseRow(
+                            expense = expense,
+                            onClick = {
+                                editingExpense = expense
+                                showDialog = true
+                            },
+                            onDelete = { viewModel.deleteExpense(expense) }
+                        )
+                    }
                 }
             }
         }
@@ -248,6 +276,7 @@ fun ExpenseRow(
     onDelete: () -> Unit
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -291,8 +320,36 @@ fun ExpenseRow(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.error
             )
-            IconButton(onClick = { showDeleteConfirm = true }) {
-                Icon(Icons.Default.Delete, contentDescription = "Sil")
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Harcama seçenekleri")
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Düzenle") },
+                        onClick = {
+                            menuExpanded = false
+                            onClick()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Sil", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            showDeleteConfirm = true
+                        }
+                    )
+                }
             }
         }
     }
@@ -316,6 +373,49 @@ fun ExpenseRow(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ExpenseMonthSummary(
+    expenses: List<Expense>,
+    selectedMonth: YearMonth,
+    isFiltered: Boolean
+) {
+    val total = expenses.sumOf { it.amount }
+    val dailyAverage = total / selectedMonth.lengthOfMonth()
+    val topCategory = expenses
+        .groupBy { it.category?.name ?: "Kategorisiz" }
+        .mapValues { (_, values) -> values.sumOf { it.amount } }
+        .maxByOrNull { it.value }
+
+    FinanceCard(
+        containerColor = if (isFiltered) {
+            MaterialTheme.colorScheme.tertiaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        }
+    ) {
+        Column(
+            Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Text(
+                if (isFiltered) "Filtrelenen toplam" else "Bu ay toplam harcama",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                MoneyFormatter.format(total),
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Text(
+                "Günlük ortalama ${MoneyFormatter.format(dailyAverage)}" +
+                    (topCategory?.let { " · En yüksek ${it.key}" } ?: ""),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
