@@ -1,6 +1,8 @@
 package com.umit.budgettracker.feature.reports
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,6 +61,15 @@ import com.umit.budgettracker.core.ui.components.FinanceCard
 import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
 import com.umit.budgettracker.core.ui.components.MetricTile
 import com.umit.budgettracker.core.ui.components.StatusPill
+import com.umit.budgettracker.core.ui.charts.ChartLegendRow
+import com.umit.budgettracker.core.ui.charts.ChartSeries
+import com.umit.budgettracker.core.ui.charts.ChartSlice
+import com.umit.budgettracker.core.ui.charts.DonutChart
+import com.umit.budgettracker.core.ui.charts.DonutLegend
+import com.umit.budgettracker.core.ui.charts.Sparkline
+import com.umit.budgettracker.core.ui.charts.StackedBarChart
+import com.umit.budgettracker.core.ui.charts.StackedBarGroup
+import com.umit.budgettracker.core.ui.charts.foldTail
 import com.umit.budgettracker.core.util.DateUtils
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
@@ -127,7 +139,7 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
 
                     when (selectedTab) {
                         0 -> OverviewReport(state)
-                        1 -> ExpenseReport(state.currentMonth, state.previousMonth, state.categoryTrends)
+                        1 -> ExpenseReport(state.currentMonth, state.previousMonth, state.categoryTrends, state.trend)
                         else -> CashFlowReport(state)
                     }
                 }
@@ -177,7 +189,8 @@ private fun OverviewReport(state: ReportsUiState.Success) {
 private fun ExpenseReport(
     current: MonthlyBudgetSummary,
     previous: MonthlyBudgetSummary,
-    categoryTrends: List<CategoryTrend>
+    categoryTrends: List<CategoryTrend>,
+    trend: List<MonthlyTrendPoint>
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -205,6 +218,7 @@ private fun ExpenseReport(
                 }
             }
         } else {
+            item { CategoryDonutCard(current.categorySummaries) }
             items(current.categorySummaries) { category ->
                 CategoryReportRow(category, current.totalExpenseAmount)
             }
@@ -225,11 +239,96 @@ private fun ExpenseReport(
                 subtitle = "Harcamaların hangi kaynaktan geldiği"
             )
         }
+        item { ChannelHistoryCard(trend) }
         item { SpendingChannelsCard(current) }
     }
 }
 
 private const val MAX_TREND_ROWS = 6
+private const val MAX_DONUT_SLICES = 5
+
+@Composable
+private fun CategoryDonutCard(categories: List<CategorySummary>) {
+    val otherColor = MaterialTheme.colorScheme.outline
+    val slices = remember(categories, otherColor) {
+        categories
+            .filter { it.amount > 0L }
+            .map { ChartSlice(it.categoryName, it.amount, Color(it.colorValue)) }
+            .foldTail(keep = MAX_DONUT_SLICES, otherColor = otherColor)
+    }
+    var selected by remember(slices) { mutableStateOf<Int?>(null) }
+    if (slices.isEmpty()) return
+
+    FinanceCard {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            DonutChart(
+                slices = slices,
+                selectedIndex = selected,
+                onSelect = { selected = it },
+                modifier = Modifier.size(150.dp)
+            )
+            DonutLegend(
+                slices = slices,
+                selectedIndex = selected,
+                onSelect = { selected = it },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChannelHistoryCard(trend: List<MonthlyTrendPoint>) {
+    val series = listOf(
+        ChartSeries("Nakit / banka", MaterialTheme.colorScheme.primary),
+        ChartSeries("Kredi kartı", MaterialTheme.colorScheme.tertiary)
+    )
+    val groups = trend.map { point ->
+        StackedBarGroup(
+            label = DateUtils.formatMonthYear(point.month).take(3),
+            values = listOf(point.directExpenseAmount, point.creditCardPaymentAmount)
+        )
+    }
+    var selected by remember(trend) { mutableStateOf<Int?>(null) }
+    if (groups.none { group -> group.values.any { it > 0L } }) return
+
+    FinanceCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                ChartLegendRow(series)
+                val point = selected?.let { trend.getOrNull(it) }
+                Text(
+                    point?.let { DateUtils.formatMonthYear(it.month) } ?: "Son ${trend.size} ay",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            StackedBarChart(
+                groups = groups,
+                series = series,
+                selectedIndex = selected,
+                onSelect = { selected = it }
+            )
+            val point = selected?.let { trend.getOrNull(it) }
+            if (point != null) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(
+                        "Nakit / banka ${MoneyFormatter.format(point.directExpenseAmount)}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        "Kart ${MoneyFormatter.format(point.creditCardPaymentAmount)}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun CategoryTrendCard(trends: List<CategoryTrend>) {
@@ -266,6 +365,12 @@ private fun CategoryTrendRow(trend: CategoryTrend) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        Sparkline(
+            values = trend.points.map { it.amount },
+            modifier = Modifier.width(64.dp).height(24.dp),
+            markerColor = Color(trend.colorValue)
+        )
+        Spacer(Modifier.width(12.dp))
         Column(horizontalAlignment = Alignment.End) {
             Text(MoneyFormatter.format(trend.currentAmount), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))
@@ -429,27 +534,58 @@ private fun RatioMetrics(summary: MonthlyBudgetSummary) {
 private fun TrendChartCard(trend: List<MonthlyTrendPoint>) {
     val incomeColor = MaterialTheme.colorScheme.primary
     val expenseColor = MaterialTheme.colorScheme.error
+    val crosshairColor = MaterialTheme.colorScheme.outline
+    val surfaceColor = MaterialTheme.colorScheme.surface
     val maxAmount = trend.maxOfOrNull { maxOf(it.incomeAmount, it.expenseAmount) }
         ?.coerceAtLeast(1L) ?: 1L
+    var selected by remember(trend) { mutableStateOf<Int?>(null) }
+    val selectedPoint = selected?.let { trend.getOrNull(it) }
 
     FinanceCard {
         Column(Modifier.padding(16.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                ChartLegend("Gelir", incomeColor)
-                ChartLegend("Harcama", expenseColor)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    ChartLegend("Gelir", incomeColor)
+                    ChartLegend("Harcama", expenseColor)
+                }
+                Text(
+                    selectedPoint?.let { DateUtils.formatMonthYear(it.month) } ?: "Dokunarak ayı seç",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (selectedPoint != null) {
+                Spacer(Modifier.height(6.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Gelir ${MoneyFormatter.format(selectedPoint.incomeAmount)}", style = MaterialTheme.typography.bodySmall)
+                    Text("Harcama ${MoneyFormatter.format(selectedPoint.expenseAmount)}", style = MaterialTheme.typography.bodySmall)
+                }
             }
             Spacer(Modifier.height(18.dp))
-            Canvas(Modifier.fillMaxWidth().height(150.dp)) {
+            Canvas(
+                Modifier
+                    .fillMaxWidth()
+                    .height(150.dp)
+                    .pointerInput(trend) {
+                        detectTapGestures { tap ->
+                            if (trend.size < 2) return@detectTapGestures
+                            val stepX = size.width / (trend.size - 1)
+                            val index = ((tap.x + stepX / 2f) / stepX).toInt().coerceIn(0, trend.lastIndex)
+                            selected = index.takeIf { it != selected }
+                        }
+                    }
+            ) {
                 if (trend.size < 2) return@Canvas
                 val stepX = size.width / (trend.size - 1)
                 val usableHeight = size.height - 12.dp.toPx()
+
+                fun yFor(amount: Long): Float = usableHeight - (amount.toFloat() / maxAmount.toFloat() * usableHeight)
 
                 fun buildPath(amount: (MonthlyTrendPoint) -> Long): Path {
                     val path = Path()
                     trend.forEachIndexed { index, point ->
                         val x = stepX * index
-                        val y = usableHeight -
-                            (amount(point).toFloat() / maxAmount.toFloat() * usableHeight)
+                        val y = yFor(amount(point))
                         if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
                     }
                     return path
@@ -461,24 +597,29 @@ private fun TrendChartCard(trend: List<MonthlyTrendPoint>) {
                     end = Offset(size.width, usableHeight),
                     strokeWidth = 1.dp.toPx()
                 )
+                selected?.let { index ->
+                    val x = stepX * index
+                    drawLine(crosshairColor, Offset(x, 0f), Offset(x, usableHeight), strokeWidth = 1.dp.toPx())
+                }
                 drawPath(
                     buildPath { it.incomeAmount },
                     color = incomeColor,
-                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
                 )
                 drawPath(
                     buildPath { it.expenseAmount },
                     color = expenseColor,
-                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
                 )
                 trend.forEachIndexed { index, point ->
                     val x = stepX * index
-                    val incomeY = usableHeight -
-                        (point.incomeAmount.toFloat() / maxAmount.toFloat() * usableHeight)
-                    val expenseY = usableHeight -
-                        (point.expenseAmount.toFloat() / maxAmount.toFloat() * usableHeight)
-                    drawCircle(incomeColor, 4.dp.toPx(), Offset(x, incomeY))
-                    drawCircle(expenseColor, 4.dp.toPx(), Offset(x, expenseY))
+                    val isSelected = index == selected
+                    val radius = if (isSelected) 5.dp.toPx() else 4.dp.toPx()
+                    // 2dp surface ring so overlapping markers stay separable
+                    drawCircle(surfaceColor, radius + 2.dp.toPx(), Offset(x, yFor(point.incomeAmount)))
+                    drawCircle(incomeColor, radius, Offset(x, yFor(point.incomeAmount)))
+                    drawCircle(surfaceColor, radius + 2.dp.toPx(), Offset(x, yFor(point.expenseAmount)))
+                    drawCircle(expenseColor, radius, Offset(x, yFor(point.expenseAmount)))
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

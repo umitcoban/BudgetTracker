@@ -70,6 +70,7 @@ feature/*/XxxScreen.kt          Compose, presentation only, collects StateFlow
 - `core/network/ExchangeRateService.kt` is the only network code (user-triggered Frankfurter lookup); everything else is offline.
 - `core/reminder/` — `PaymentReminderScheduler` + `PaymentReminderReceiver` + `BootCompletedReceiver` implement the 09:00 local reminder.
 - `core/util/MoneyFormatter.kt` formats/parses TRY kuruş; UI text-field input is parsed here, never with `Double` arithmetic in domain code.
+- `core/ui/charts/Charts.kt` holds the Canvas-based charts (donut + legend, stacked bars, sparkline, legend row) — no chart library. They take `Long` amounts, use theme colors, keep 2dp surface gaps between fills, and report tap selection back to the caller, which renders the values as text. Fold donut input to ≤ 6 slices with `foldTail` before calling.
 
 ## Conventions worth knowing
 

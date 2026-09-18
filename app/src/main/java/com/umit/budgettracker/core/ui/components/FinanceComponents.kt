@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.umit.budgettracker.core.ui.charts.Sparkline
 
 @Composable
 fun FinanceCard(
@@ -72,7 +73,8 @@ fun MetricTile(
     value: String,
     modifier: Modifier = Modifier,
     supportingText: String? = null,
-    valueColor: Color = MaterialTheme.colorScheme.onSurface
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
+    sparkline: List<Long>? = null
 ) {
     Surface(
         modifier = modifier,
@@ -99,6 +101,13 @@ fun MetricTile(
                     supportingText,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (sparkline != null && sparkline.size >= 2 && sparkline.any { it != 0L }) {
+                Spacer(Modifier.height(8.dp))
+                Sparkline(
+                    values = sparkline,
+                    modifier = Modifier.fillMaxWidth().height(22.dp)
                 )
             }
         }
