@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 import java.time.YearMonth
@@ -142,12 +143,68 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
         assertEquals(null, categorySummary.budgetLimit)
     }
 
+    @Test
+    fun getSummariesForMonths_matchesIndividualMonthSummaries() = runBlocking {
+        val card = PaymentAccount(2L, "Kart", AccountType.CREDIT_CARD, 11, 20, true)
+        val bank = PaymentAccount(1L, "Banka", AccountType.BANK_ACCOUNT, null, null, true)
+        val calc = calculator(
+            expenses = listOf(
+                expense(amount = 10_000L, date = LocalDate.of(2026, 5, 12), account = card),
+                expense(amount = 7_500L, date = LocalDate.of(2026, 6, 3), account = bank),
+                expense(amount = 4_000L, date = LocalDate.of(2026, 7, 20), account = card)
+            )
+        )
+        val months = listOf(YearMonth.of(2026, 5), YearMonth.of(2026, 6), YearMonth.of(2026, 7))
+
+        val batched = calc.getSummariesForMonths(months).first()
+        val individual = months.map { calc.getSummaryForMonth(it).first() }
+
+        assertEquals(months, batched.map { it.yearMonth })
+        assertEquals(individual, batched)
+    }
+
+    @Test
+    fun getSummariesForMonths_loadsOnlyThePlanningWindowAndStillCatchesShiftedCardExpenses() = runBlocking {
+        // dueDay <= statementDay pushes a post-statement expense two months forward: May -> July.
+        val card = PaymentAccount(3L, "Kart", AccountType.CREDIT_CARD, 13, 5, true)
+        val repository = RangeTrackingExpenseRepository(
+            listOf(
+                expense(amount = 10_000L, date = LocalDate.of(2026, 5, 14), account = card),
+                expense(amount = 99_000L, date = LocalDate.of(2026, 1, 10), account = card)
+            )
+        )
+        val july = YearMonth.of(2026, 7)
+
+        val summary = calculator(expenseRepository = repository).getSummariesForMonths(listOf(july)).first().single()
+
+        assertEquals(LocalDate.of(2026, 5, 1)..LocalDate.of(2026, 7, 31), repository.requestedRange)
+        assertEquals(10_000L, summary.creditCardPaymentAmount)
+    }
+
+    @Test
+    fun getSummaryForMonth_populatesWarningsWhenCategoryBudgetIsExceeded() = runBlocking {
+        val account = PaymentAccount(1L, "Banka", AccountType.BANK_ACCOUNT, null, null, true)
+        val category = Category(7L, "Market", "cart", 0xFF2196F3.toInt(), CategoryType.EXPENSE, true, true, 0)
+        val month = YearMonth.of(2026, 5)
+        val budget = CategoryBudget(1L, category.id, month, 50_000L, null, category)
+        val overspend = expense(amount = 62_500L, date = month.atDay(9), account = account, category = category)
+
+        val summary = calculator(expenses = listOf(overspend), budgets = listOf(budget))
+            .getSummaryForMonth(month)
+            .first()
+
+        val warning = summary.warnings.single()
+        assertEquals(BudgetWarningType.CATEGORY_LIMIT_EXCEEDED, warning.type)
+        assertTrue(warning.message, warning.message.startsWith("Market bütçesi"))
+    }
+
     private fun calculator(
         expenses: List<Expense> = emptyList(),
         fixedExpenses: List<FixedExpense> = emptyList(),
-        statementRules: List<CreditCardStatementRule> = emptyList()
+        statementRules: List<CreditCardStatementRule> = emptyList(),
+        budgets: List<CategoryBudget> = emptyList(),
+        expenseRepository: ExpenseRepository = FakeExpenseRepository(expenses)
     ): MonthlyBudgetCalculator {
-        val expenseRepository = FakeExpenseRepository(expenses)
         val categoryRepository = FakeCategoryRepository()
         val accountRepository = FakePaymentAccountRepository()
         return MonthlyBudgetCalculator(
@@ -155,9 +212,10 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
             savingGoalRepository = FakeSavingGoalRepository(),
             incomeRepository = FakeIncomeRepository(),
             expenseRepository = expenseRepository,
-            budgetRepository = FakeCategoryBudgetRepository(),
+            budgetRepository = FakeCategoryBudgetRepository(budgets),
             adjustmentRepository = FakeExpenseAdjustmentRepository(),
             statementRuleRepository = FakeCreditCardStatementRuleRepository(statementRules),
+            statementPaymentRepository = FakeCreditCardStatementPaymentRepository(),
             subscriptionCalculator = SubscriptionMonthlyCalculator(
                 subscriptionRepository = FakeSubscriptionRepository(),
                 categoryRepository = categoryRepository,
@@ -214,6 +272,27 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
         override suspend fun deleteIncome(income: Income) = Unit
     }
 
+    /** Records the date window the calculator asks for and honours it like the Room query would. */
+    private class RangeTrackingExpenseRepository(private val expenses: List<Expense>) : ExpenseRepository {
+        var requestedRange: ClosedRange<LocalDate>? = null
+
+        override fun observeExpensesForDateRange(startDate: LocalDate, endDate: LocalDate): Flow<List<Expense>> {
+            requestedRange = startDate..endDate
+            return flowOf(expenses.filter { it.expenseDate in startDate..endDate })
+        }
+        override fun observeExpensesForMonth(yearMonth: YearMonth): Flow<List<Expense>> {
+            return flowOf(expenses.filter { YearMonth.from(it.expenseDate) == yearMonth })
+        }
+        override fun observeAllExpenses(): Flow<List<Expense>> = error("range query expected")
+        override suspend fun getExpenseById(id: Long): Expense? = expenses.firstOrNull { it.id == id }
+        override suspend fun insertExpense(expense: Expense) = Unit
+        override suspend fun updateExpense(expense: Expense) = Unit
+        override suspend fun deleteExpense(expense: Expense) = Unit
+        override suspend fun hasSubscriptionExpenseForMonth(subscriptionId: Long, yearMonth: YearMonth): Boolean = false
+        override suspend fun hasAnySubscriptionExpense(subscriptionId: Long): Boolean = false
+        override suspend fun hasFixedExpenseForMonth(fixedExpenseId: Long, yearMonth: YearMonth): Boolean = false
+    }
+
     private class FakeExpenseRepository(private val expenses: List<Expense>) : ExpenseRepository {
         override fun observeExpensesForMonth(yearMonth: YearMonth): Flow<List<Expense>> {
             return flowOf(expenses.filter { YearMonth.from(it.expenseDate) == yearMonth })
@@ -228,9 +307,10 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
         override suspend fun hasFixedExpenseForMonth(fixedExpenseId: Long, yearMonth: YearMonth): Boolean = false
     }
 
-    private class FakeCategoryBudgetRepository : CategoryBudgetRepository {
-        override fun observeAllBudgets(): Flow<List<CategoryBudget>> = flowOf(emptyList())
-        override fun observeBudgetsForMonth(yearMonth: YearMonth): Flow<List<CategoryBudget>> = flowOf(emptyList())
+    private class FakeCategoryBudgetRepository(private val budgets: List<CategoryBudget>) : CategoryBudgetRepository {
+        override fun observeAllBudgets(): Flow<List<CategoryBudget>> = flowOf(budgets)
+        override fun observeBudgetsForMonth(yearMonth: YearMonth): Flow<List<CategoryBudget>> =
+            flowOf(budgets.filter { it.yearMonth == yearMonth })
         override fun observeBudgetForCategoryAndMonth(categoryId: Long, yearMonth: YearMonth): Flow<CategoryBudget?> = flowOf(null)
         override suspend fun upsertCategoryBudget(budget: CategoryBudget) = Unit
         override suspend fun deleteCategoryBudget(budget: CategoryBudget) = Unit
@@ -241,6 +321,13 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
         override fun observeForExpense(expenseId: Long): Flow<List<ExpenseAdjustment>> = flowOf(emptyList())
         override suspend fun addAdjustment(adjustment: ExpenseAdjustment) = Unit
         override suspend fun deleteAdjustment(adjustment: ExpenseAdjustment) = Unit
+    }
+
+    private class FakeCreditCardStatementPaymentRepository : CreditCardStatementPaymentRepository {
+        override fun observeAllPayments(): Flow<List<CreditCardStatementPayment>> = flowOf(emptyList())
+        override fun observePaymentsForMonth(paymentMonth: YearMonth): Flow<List<CreditCardStatementPayment>> = flowOf(emptyList())
+        override suspend fun setStatementPaid(accountId: Long, paymentMonth: YearMonth, amount: Long) = Unit
+        override suspend fun setStatementUnpaid(accountId: Long, paymentMonth: YearMonth) = Unit
     }
 
     private class FakeCreditCardStatementRuleRepository(

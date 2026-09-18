@@ -24,17 +24,23 @@ class ReportsViewModel @Inject constructor(
 
     val uiState: StateFlow<ReportsUiState> = _selectedMonth
         .flatMapLatest { month ->
+            val months = (TREND_MONTH_COUNT - 1 downTo 0).map { month.minusMonths(it.toLong()) }
             combine(
-                calculator.getSummaryForMonth(month),
-                calculator.getSummaryForMonth(month.minusMonths(1)),
-                netWorthRepository.observeSnapshotForMonth(month),
-                sixMonthTrend(month)
-            ) { current, previous, netWorth, trend ->
+                calculator.getSummariesForMonths(months),
+                netWorthRepository.observeSnapshotForMonth(month)
+            ) { summaries, netWorth ->
                 ReportsUiState.Success(
-                    currentMonth = current,
-                    previousMonth = previous,
+                    currentMonth = summaries.last(),
+                    previousMonth = summaries[summaries.size - 2],
                     netWorth = netWorth,
-                    trend = trend
+                    trend = summaries.map { summary ->
+                        MonthlyTrendPoint(
+                            month = summary.yearMonth,
+                            incomeAmount = summary.totalIncomeAmount,
+                            expenseAmount = summary.totalExpenseAmount,
+                            remainingAmount = summary.remainingAfterSavingAndFixedPayments
+                        )
+                    }
                 )
             }
         }
@@ -43,24 +49,9 @@ class ReportsViewModel @Inject constructor(
     fun nextMonth() { _selectedMonth.value = _selectedMonth.value.plusMonths(1) }
     fun previousMonth() { _selectedMonth.value = _selectedMonth.value.minusMonths(1) }
 
-    private fun sixMonthTrend(lastMonth: YearMonth): Flow<List<MonthlyTrendPoint>> {
-        return combine(
-            calculator.getSummaryForMonth(lastMonth.minusMonths(5)),
-            calculator.getSummaryForMonth(lastMonth.minusMonths(4)),
-            calculator.getSummaryForMonth(lastMonth.minusMonths(3)),
-            calculator.getSummaryForMonth(lastMonth.minusMonths(2)),
-            calculator.getSummaryForMonth(lastMonth.minusMonths(1)),
-            calculator.getSummaryForMonth(lastMonth)
-        ) { summaries ->
-            summaries.map { summary ->
-                MonthlyTrendPoint(
-                    month = summary.yearMonth,
-                    incomeAmount = summary.totalIncomeAmount,
-                    expenseAmount = summary.totalExpenseAmount,
-                    remainingAmount = summary.remainingAfterSavingAndFixedPayments
-                )
-            }
-        }
+    private companion object {
+        /** Selected month plus the five before it; the previous-month comparison reuses index size-2. */
+        const val TREND_MONTH_COUNT = 6
     }
 }
 
