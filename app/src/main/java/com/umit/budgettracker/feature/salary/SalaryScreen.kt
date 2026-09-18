@@ -34,7 +34,16 @@ fun SalaryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Maaş Kuralları") },
+                title = {
+                    Column {
+                        Text("Maaş Planı", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "Düzenli aylık gelirin",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
@@ -44,7 +53,7 @@ fun SalaryScreen(
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Maaş Değişikliği Ekle")
+                Icon(Icons.Default.Add, contentDescription = "Maaşı güncelle")
             }
         }
     ) { padding ->
@@ -100,11 +109,13 @@ private fun SalaryInfoCard() {
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
-        Text(
-            text = "Eksik geçmiş maaş varsa eski başlangıç ayıyla ayrı kural ekleyin. Yeni zam için eski kuralı taşımayın; zam ayından itibaren yeni kural oluşturun.",
-            modifier = Modifier.padding(12.dp),
-            style = MaterialTheme.typography.bodySmall
-        )
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Maaş nasıl uygulanır?", style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = "Yeni maaş tutarı, seçtiğin başlangıç ayından itibaren gelecek aylara uygulanır. Önceki aylar eski maaş kuralını kullanmaya devam eder.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
     }
 }
 
@@ -120,7 +131,10 @@ fun SalaryRuleRow(rule: SalaryRule, onEdit: () -> Unit, onDelete: () -> Unit) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = MoneyFormatter.format(rule.amount), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(text = "${rule.effectiveStartMonth} ayından itibaren geçerli", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = "${rule.effectiveStartMonth} ayından itibaren",
+                    style = MaterialTheme.typography.bodyMedium
+                )
                 if (!rule.note.isNullOrBlank()) {
                     Text(text = rule.note, style = MaterialTheme.typography.bodySmall)
                 }
@@ -150,17 +164,17 @@ fun SalaryRuleDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (existingRule == null) "Maaş Değişikliği Ekle" else "Maaş Kuralını Düzenle") },
+        title = { Text(if (existingRule == null) "Maaşı Güncelle" else "Maaş Kuralını Düzenle") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = amountText, onValueChange = { amountText = it }, label = { Text("Miktar (TL)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = monthText, onValueChange = { monthText = it }, label = { Text("Başlangıç Ayı (YYYY-MM)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = monthText, onValueChange = { monthText = it }, label = { Text("Geçerli olacağı ay (YYYY-MM)") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Not (Opsiyonel)") }, modifier = Modifier.fillMaxWidth())
                 Text(
                     text = if (existingRule == null) {
-                        "Bu tutar seçilen aydan itibaren geçerli olur. Önceki ayların maaşı değişmez."
+                        "Bu tutar seçilen ay ve sonraki aylarda geçerli olur. Önceki ayların maaşı değişmez."
                     } else {
-                        "Başlangıç ayını değiştirirsen eski maaş kuralı korunur ve yeni bir kural eklenir."
+                        "Aynı başlangıç ayıyla kaydedersen geçmiş kuralı düzeltirsin. Ayı değiştirirsen eski kural korunur ve yeni bir maaş dönemi başlar."
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

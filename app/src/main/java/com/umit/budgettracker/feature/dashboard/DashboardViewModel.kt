@@ -6,8 +6,11 @@ import com.umit.budgettracker.core.domain.calculator.MonthlyBudgetCalculator
 import com.umit.budgettracker.core.domain.model.DebtRecord
 import com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary
 import com.umit.budgettracker.core.domain.model.MonthlySavingGoal
+import com.umit.budgettracker.core.domain.model.SalaryRule
 import com.umit.budgettracker.core.domain.repository.DebtRepository
+import com.umit.budgettracker.core.domain.repository.IncomeRepository
 import com.umit.budgettracker.core.domain.repository.SavingGoalRepository
+import com.umit.budgettracker.core.domain.repository.SalaryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -20,7 +23,9 @@ import javax.inject.Inject
 class DashboardViewModel @Inject constructor(
     private val calculator: MonthlyBudgetCalculator,
     private val savingGoalRepository: SavingGoalRepository,
-    private val debtRepository: DebtRepository
+    private val debtRepository: DebtRepository,
+    private val salaryRepository: SalaryRepository,
+    private val incomeRepository: IncomeRepository
 ) : ViewModel() {
 
     private val _selectedMonth = MutableStateFlow(YearMonth.now())
@@ -28,12 +33,30 @@ class DashboardViewModel @Inject constructor(
 
     val uiState: StateFlow<DashboardUiState> = _selectedMonth
         .flatMapLatest { month ->
-            combine(
+            val monthlyIncomeContext = combine(
                 calculator.getSummaryForMonth(month),
                 calculator.getSummaryForMonth(month.minusMonths(1)),
+                salaryRepository.observeSalaryForMonth(month),
+                incomeRepository.observeIncomesForMonth(month)
+            ) { summary, previousSummary, salaryRule, additionalIncomes ->
+                DashboardIncomeContext(
+                    summary = summary,
+                    previousSummary = previousSummary,
+                    salaryRule = salaryRule,
+                    additionalIncomeCount = additionalIncomes.size
+                )
+            }
+            combine(
+                monthlyIncomeContext,
                 debtRepository.observeOpenDebtRecords()
-            ) { summary, previousSummary, debts ->
-                DashboardUiState.Success(summary, previousSummary, debts)
+            ) { incomeContext, debts ->
+                DashboardUiState.Success(
+                    summary = incomeContext.summary,
+                    previousSummary = incomeContext.previousSummary,
+                    effectiveSalaryRule = incomeContext.salaryRule,
+                    additionalIncomeCount = incomeContext.additionalIncomeCount,
+                    openDebts = debts
+                )
             }
         }
         .stateIn(
@@ -77,7 +100,16 @@ sealed interface DashboardUiState {
     data class Success(
         val summary: MonthlyBudgetSummary,
         val previousSummary: MonthlyBudgetSummary,
+        val effectiveSalaryRule: SalaryRule?,
+        val additionalIncomeCount: Int,
         val openDebts: List<DebtRecord>
     ) : DashboardUiState
     data class Error(val message: String) : DashboardUiState
 }
+
+private data class DashboardIncomeContext(
+    val summary: MonthlyBudgetSummary,
+    val previousSummary: MonthlyBudgetSummary,
+    val salaryRule: SalaryRule?,
+    val additionalIncomeCount: Int
+)

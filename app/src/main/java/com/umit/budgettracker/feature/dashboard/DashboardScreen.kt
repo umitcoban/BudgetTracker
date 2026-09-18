@@ -2,6 +2,7 @@ package com.umit.budgettracker.feature.dashboard
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -61,6 +63,7 @@ import com.umit.budgettracker.core.domain.model.BudgetWarning
 import com.umit.budgettracker.core.domain.model.CategorySummary
 import com.umit.budgettracker.core.domain.model.DebtType
 import com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary
+import com.umit.budgettracker.core.domain.model.SalaryRule
 import com.umit.budgettracker.core.navigation.Screen
 import com.umit.budgettracker.core.navigation.navigateToTopLevelDestination
 import com.umit.budgettracker.core.ui.IconMapper
@@ -144,6 +147,21 @@ fun DashboardScreen(
 
                     item {
                         KeyMetrics(summary)
+                    }
+
+                    item {
+                        IncomeManagementCard(
+                            selectedMonth = selectedMonth,
+                            summary = summary,
+                            effectiveSalaryRule = state.effectiveSalaryRule,
+                            additionalIncomeCount = state.additionalIncomeCount,
+                            onSalaryClick = {
+                                navController.navigate(Screen.SalaryManagement.route)
+                            },
+                            onAdditionalIncomeClick = {
+                                navController.navigate(Screen.Income.route)
+                            }
+                        )
                     }
 
                     if (summary.warnings.isNotEmpty()) {
@@ -260,6 +278,101 @@ fun DashboardScreen(
                     Text(state.message, color = MaterialTheme.colorScheme.error)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun IncomeManagementCard(
+    selectedMonth: YearMonth,
+    summary: MonthlyBudgetSummary,
+    effectiveSalaryRule: SalaryRule?,
+    additionalIncomeCount: Int,
+    onSalaryClick: () -> Unit,
+    onAdditionalIncomeClick: () -> Unit
+) {
+    FinanceCard {
+        Column(Modifier.padding(vertical = 6.dp)) {
+            Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+                Text("Gelir yönetimi", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    "Maaş ileriye dönük devam eder; ek gelir yalnızca kayıtlı olduğu ayı etkiler.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IncomeManagementRow(
+                title = "Aylık maaş",
+                amount = summary.salaryAmount,
+                supportingText = effectiveSalaryRule?.let {
+                    "${DateUtils.formatMonthYear(it.effectiveStartMonth)} ayından itibaren geçerli"
+                } ?: "Bu ay için geçerli maaş kuralı yok",
+                icon = Icons.Default.Payments,
+                onClick = onSalaryClick
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 18.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+            IncomeManagementRow(
+                title = "Tek seferlik ek gelirler",
+                amount = summary.additionalIncomeAmount,
+                supportingText = if (additionalIncomeCount > 0) {
+                    "$additionalIncomeCount kayıt • Yalnızca ${DateUtils.formatMonthYear(selectedMonth)}"
+                } else {
+                    "${DateUtils.formatMonthYear(selectedMonth)} için kayıt yok"
+                },
+                icon = Icons.Default.Savings,
+                onClick = onAdditionalIncomeClick
+            )
+        }
+    }
+}
+
+@Composable
+private fun IncomeManagementRow(
+    title: String,
+    amount: Long,
+    supportingText: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(9.dp).size(20.dp)
+            )
+        }
+        Spacer(Modifier.width(11.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(
+                supportingText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(MoneyFormatter.format(amount), style = MaterialTheme.typography.titleSmall)
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = "Yönet",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }

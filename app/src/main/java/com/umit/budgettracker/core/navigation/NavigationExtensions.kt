@@ -16,3 +16,11 @@ fun NavController.navigateToTopLevelDestination(screen: Screen) {
         restoreState = true
     }
 }
+
+/** Returns to Dashboard even when the detail screen was opened from a restored/deep-linked stack. */
+fun NavController.navigateBackToDashboard() {
+    val returnedToDashboard = popBackStack(Screen.Dashboard.route, inclusive = false)
+    if (!returnedToDashboard) {
+        navigateToTopLevelDestination(Screen.Dashboard)
+    }
+}
