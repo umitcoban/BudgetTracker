@@ -3,6 +3,7 @@ package com.umit.budgettracker.core.domain.calculator
 import com.umit.budgettracker.core.domain.model.CreditCardStatementSummary
 import com.umit.budgettracker.core.domain.model.CreditCardStatementRule
 import com.umit.budgettracker.core.domain.model.Expense
+import com.umit.budgettracker.core.domain.model.ExpenseAdjustment
 import com.umit.budgettracker.core.domain.model.PaymentAccount
 import java.time.LocalDate
 import java.time.YearMonth
@@ -14,8 +15,10 @@ class CreditCardStatementCalculator @Inject constructor() {
         account: PaymentAccount,
         paymentMonth: YearMonth,
         allExpenses: List<Expense>,
-        rules: List<CreditCardStatementRule> = emptyList()
+        rules: List<CreditCardStatementRule> = emptyList(),
+        adjustments: List<ExpenseAdjustment> = emptyList()
     ): CreditCardStatementSummary {
+        val adjustmentsByExpenseId = ExpenseAdjustmentRules.groupByExpense(adjustments)
         val paymentRule = ruleForMonth(account, paymentMonth, rules)
         val statementDay = paymentRule.statementDay
         val dueDay = paymentRule.dueDay
@@ -50,7 +53,7 @@ class CreditCardStatementCalculator @Inject constructor() {
             statementStartDate = statementStartDate,
             statementEndDate = statementEndDate,
             dueDate = dueDate,
-            totalAmount = includedExpenses.sumOf { it.amount },
+            totalAmount = includedExpenses.sumOf { it.netAmount(adjustmentsByExpenseId) },
             expenses = includedExpenses
         )
     }

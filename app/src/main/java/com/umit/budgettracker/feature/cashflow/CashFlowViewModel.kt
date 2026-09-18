@@ -3,18 +3,24 @@ package com.umit.budgettracker.feature.cashflow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.umit.budgettracker.core.domain.calculator.CreditCardStatementCalculator
+import com.umit.budgettracker.core.domain.calculator.ExpenseAdjustmentRules
+import com.umit.budgettracker.core.domain.calculator.netAmount
 import com.umit.budgettracker.core.domain.calculator.FixedExpenseMonthlyCalculator
 import com.umit.budgettracker.core.domain.calculator.LoanMonthlyCalculator
 import com.umit.budgettracker.core.domain.calculator.SubscriptionMonthlyCalculator
 import com.umit.budgettracker.core.domain.model.CashFlowEvent
 import com.umit.budgettracker.core.domain.model.CashFlowEventType
 import com.umit.budgettracker.core.domain.model.AccountType
+import com.umit.budgettracker.core.domain.model.CreditCardStatementRule
 import com.umit.budgettracker.core.domain.model.Expense
+import com.umit.budgettracker.core.domain.model.ExpenseAdjustment
 import com.umit.budgettracker.core.domain.model.FixedExpenseMonthlyPayment
 import com.umit.budgettracker.core.domain.model.Income
 import com.umit.budgettracker.core.domain.model.LoanMonthlyPayment
 import com.umit.budgettracker.core.domain.model.PaymentAccount
 import com.umit.budgettracker.core.domain.model.SubscriptionMonthlyPayment
+import com.umit.budgettracker.core.domain.repository.CreditCardStatementRuleRepository
+import com.umit.budgettracker.core.domain.repository.ExpenseAdjustmentRepository
 import com.umit.budgettracker.core.domain.repository.ExpenseRepository
 import com.umit.budgettracker.core.domain.repository.IncomeRepository
 import com.umit.budgettracker.core.domain.repository.PaymentAccountRepository
@@ -28,6 +34,8 @@ import javax.inject.Inject
 @HiltViewModel
 class CashFlowViewModel @Inject constructor(
     private val expenseRepository: ExpenseRepository,
+    private val adjustmentRepository: ExpenseAdjustmentRepository,
+    private val statementRuleRepository: CreditCardStatementRuleRepository,
     private val incomeRepository: IncomeRepository,
     private val accountRepository: PaymentAccountRepository,
     private val statementCalculator: CreditCardStatementCalculator,
@@ -44,9 +52,22 @@ class CashFlowViewModel @Inject constructor(
             val actualFlow = combine(
                 incomeRepository.observeIncomesForMonth(month),
                 expenseRepository.observeExpensesForMonth(month),
-                expenseRepository.observeAllExpenses()
-            ) { incomes, expenses, allExpenses ->
-                CashFlowActualInputs(incomes, expenses, allExpenses)
+                // A statement due this month closes at most two calendar months back.
+                expenseRepository.observeExpensesForDateRange(
+                    startDate = month.minusMonths(STATEMENT_LOOKBACK_MONTHS).atDay(1),
+                    endDate = month.atEndOfMonth()
+                ),
+                adjustmentRepository.observeAllAdjustments(),
+                statementRuleRepository.observeAllRules()
+            ) { incomes, expenses, statementWindowExpenses, adjustments, rules ->
+                CashFlowActualInputs(
+                    incomes = incomes,
+                    expenses = expenses,
+                    statementWindowExpenses = statementWindowExpenses,
+                    adjustmentsByExpenseId = ExpenseAdjustmentRules.groupByExpense(adjustments),
+                    adjustments = adjustments,
+                    statementRules = rules
+                )
             }
             val plannedFlow = combine(
                 accountRepository.observeActiveAccounts(),
@@ -81,7 +102,7 @@ class CashFlowViewModel @Inject constructor(
                         CashFlowEvent(
                             date = e.expenseDate,
                             title = e.title,
-                            amount = e.amount,
+                            amount = e.netAmount(actual.adjustmentsByExpenseId),
                             type = if (e.installmentGroupId != null) CashFlowEventType.INSTALLMENT else CashFlowEventType.EXPENSE,
                             sourceId = e.id,
                             description = when {
@@ -94,7 +115,13 @@ class CashFlowViewModel @Inject constructor(
                 }
 
                 planned.accounts.filter { it.type == AccountType.CREDIT_CARD }.forEach { acc ->
-                    val statement = statementCalculator.calculateStatement(acc, month, actual.allExpenses)
+                    val statement = statementCalculator.calculateStatement(
+                        account = acc,
+                        paymentMonth = month,
+                        allExpenses = actual.statementWindowExpenses,
+                        rules = actual.statementRules,
+                        adjustments = actual.adjustments
+                    )
                     if (statement.totalAmount > 0) {
                         list.add(
                             CashFlowEvent(
@@ -161,10 +188,15 @@ class CashFlowViewModel @Inject constructor(
     fun previousMonth() { _selectedMonth.value = _selectedMonth.value.minusMonths(1) }
 }
 
+private const val STATEMENT_LOOKBACK_MONTHS = 2L
+
 private data class CashFlowActualInputs(
     val incomes: List<Income>,
     val expenses: List<Expense>,
-    val allExpenses: List<Expense>
+    val statementWindowExpenses: List<Expense>,
+    val adjustmentsByExpenseId: Map<Long, List<ExpenseAdjustment>>,
+    val adjustments: List<ExpenseAdjustment>,
+    val statementRules: List<CreditCardStatementRule>
 )
 
 private data class CashFlowPlannedInputs(

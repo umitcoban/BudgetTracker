@@ -30,12 +30,15 @@ BudgetTracker is a local-only personal finance and monthly budgeting app. It is 
 - Compile SDK: 36
 - Min SDK: 33
 - Target SDK: 36
-- JVM target: 17
-- Kotlin: 2.0.0
-- Android Gradle Plugin: 8.13.2
-- Room: 2.6.1
-- Hilt: 2.51.1
+- JVM target: 17 (Gradle daemon toolchain: JDK 21 via foojay)
+- Gradle: 9.5
+- Kotlin: 2.2.10
+- KSP: 2.3.2
+- Android Gradle Plugin: 9.3.1
+- Room: 2.8.4
+- Hilt: 2.60.1
 - Compose BOM: 2024.05.00
+- Source of truth for versions: `gradle/libs.versions.toml`, `gradle/wrapper/gradle-wrapper.properties`, `gradle/gradle-daemon-jvm.properties`
 - Database name: `budget_tracker_db`
 - Room database version: 15
 - JSON export schema version: 13
@@ -104,6 +107,8 @@ com.umit.budgettracker
     export
     navigation
     ui
+      charts
+      components
       theme
     util
   feature
@@ -155,7 +160,7 @@ Architectural expectations:
 - Cash flow calendar and future projections
 - JSON export/import
 - CSV export
-- PDF monthly report export
+- PDF report export (selected month + 12-month page with charts)
 - Raw DB backup/restore
 - Full ZIP backup/export/import
 - Receipt/photo attachments stored in app-private files
@@ -342,6 +347,23 @@ Rules:
 - Existing loans retain their stored monthly-payment values until the user edits the record.
 - A loan payment is recorded once per loan and payment month. Marking a payment as paid removes only that month's planned loan payment; it must not delete historical payment records.
 
+## Budget Warning Rule
+
+`MonthlyBudgetSummary.warnings` is produced by `BudgetWarningRules` in severity order; the Dashboard shows only the first entry, so the order is part of the contract:
+
+1. `NEGATIVE_REMAINING` — remaining after planned fixed payments is below zero
+2. `CATEGORY_LIMIT_EXCEEDED` — spending above the category budget
+3. `UPCOMING_CARD_PAYMENT` — unpaid statement due within 7 days, or already past due this month
+4. `UPCOMING_LOAN_PAYMENT` — same window for loan instalments
+5. `CATEGORY_SPENDING_SPIKE` — category at ≥150% of its 3-month average and ≥5% of the month's spending
+6. `CATEGORY_LIMIT_80_PERCENT` — budget usage between 80% and 100%
+
+Percentages are integer arithmetic. Upcoming-payment rules only apply when the selected month is the current calendar month.
+
+## Monthly Summary Batching Rule
+
+`MonthlyBudgetCalculator.getSummariesForMonths(months)` is the only path that opens database flows; `getSummaryForMonth` wraps it. Screens that need several months (Reports, Dashboard history, PDF) must pass the whole list rather than combining single-month calls. The calculator loads expenses for `[min(months) − 3 baseline months − 2 planning-shift months, max(months)]`; `MAX_PLANNING_MONTH_SHIFT` must be kept in step with the credit-card planning-month logic.
+
 ## Local Reminder Rule
 
 Local payment reminders are scheduled on-device for 09:00. The alarm must be re-scheduled when the device finishes booting, and notification permission must be requested transparently on Android 13 and later.
@@ -493,7 +515,7 @@ Financial summaries should use net expense amount:
 netExpense = expense.amount - linked refund adjustments
 ```
 
-Net amount must not go below zero.
+Net amount must not go below zero. The single implementation is `ExpenseAdjustmentRules.netAmount` / `Expense.netAmount(...)`; monthly summaries, card statements (`CreditCardStatementCalculator`), Cards and Cash Flow all go through it — do not re-derive it locally.
 
 Full ZIP import:
 
@@ -609,6 +631,11 @@ These items are known risks or production-hardening targets based on the current
 ## Data Integrity Regression Tests
 
 Current focused regression coverage includes:
+
+- Batched month summaries (`getSummariesForMonths`) equal the per-month results and only load the planning window of expenses.
+- Budget warnings order by severity; upcoming card/loan warnings fire only for the month the user is in.
+- Category spike detection needs a full three-month baseline and ignores immaterial categories.
+- Credit-card statement totals are net of refunds.
 
 - Fixed expense processing prevents duplicate monthly planned fixed-payment totals.
 - Credit-card expenses after statement day move to the next planning/payment month.

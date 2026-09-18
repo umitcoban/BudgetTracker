@@ -91,7 +91,7 @@ class MonthlyBudgetCalculator @Inject constructor(
         return combine(incomeFlow, expenseFlow, plannedFlow) { income, expense, planned ->
             val rates = subscriptionCalculator.resolveRates(planned.subscriptions, months)
             val today = LocalDate.now()
-            val adjustmentsByExpenseId = expense.adjustments.groupBy { it.expenseId }
+            val adjustmentsByExpenseId = ExpenseAdjustmentRules.groupByExpense(expense.adjustments)
             val preparedExpenses = expense.expenses.map {
                 PreparedExpense(
                     expense = it,
@@ -274,11 +274,6 @@ private fun buildCardPaymentsDue(
                 }
             )
         }
-}
-
-private fun Expense.netAmount(adjustmentsByExpenseId: Map<Long, List<ExpenseAdjustment>>): Long {
-    val adjustmentTotal = adjustmentsByExpenseId[id].orEmpty().sumOf { it.amount }
-    return (amount - adjustmentTotal).coerceAtLeast(0L)
 }
 
 private fun Expense.planningMonth(statementRules: List<CreditCardStatementRule>): YearMonth {

@@ -555,7 +555,6 @@ private fun PositiveInsightCard(
 private fun PlannedPaymentsCard(summary: MonthlyBudgetSummary) {
     FinanceCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            PaymentRow("Kredi kartı ekstreleri", summary.creditCardPaymentAmount)
             PaymentRow("Abonelikler", summary.subscriptionPlannedAmount)
             PaymentRow("Kredi ödemeleri", summary.loanPaymentAmount)
             PaymentRow("Sabit giderler", summary.fixedExpenseAmount)
@@ -570,18 +569,37 @@ private fun PlannedPaymentsCard(summary: MonthlyBudgetSummary) {
                     style = MaterialTheme.typography.titleSmall
                 )
             }
+            if (summary.creditCardPaymentAmount > 0L) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                // Card statements are spending that already sits inside "Harcama"; listing them
+                // above the total would double count them against income.
+                PaymentRow(
+                    label = "Kredi kartı ekstreleri",
+                    amount = summary.creditCardPaymentAmount,
+                    note = "Bu ay ödenecek; harcama toplamına zaten dahil"
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun PaymentRow(label: String, amount: Long) {
+private fun PaymentRow(label: String, amount: Long, note: String? = null) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            if (note != null) {
+                Text(
+                    note,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
         Text(MoneyFormatter.format(amount), style = MaterialTheme.typography.bodyMedium)
     }
 }
