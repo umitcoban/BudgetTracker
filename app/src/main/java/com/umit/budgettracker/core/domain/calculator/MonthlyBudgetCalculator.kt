@@ -32,11 +32,18 @@ class MonthlyBudgetCalculator @Inject constructor(
      * Summaries for every month in [months], in the same order, computed from a single set of
      * database subscriptions. Prefer this over several [getSummaryForMonth] calls: each of those
      * opens its own Room queries and re-fetches exchange rates independently.
+     *
+     * Expenses are loaded for `[min(months) - BASELINE_MONTHS - MAX_PLANNING_MONTH_SHIFT, max(months)]`.
      */
     fun getSummariesForMonths(months: List<YearMonth>): Flow<List<MonthlyBudgetSummary>> {
         if (months.isEmpty()) return flowOf(emptyList())
-        val firstMonth = months.min()
-        val lastMonth = months.max()
+        // Spike detection needs each month's baseline, so compute those months too (not returned).
+        val computedMonths = months
+            .flatMap { month -> (0..CategoryTrendRules.BASELINE_MONTHS).map { month.minusMonths(it.toLong()) } }
+            .distinct()
+            .sorted()
+        val firstMonth = computedMonths.first()
+        val lastMonth = computedMonths.last()
 
         val incomeFlow = combine(
             salaryRepository.observeAllSalaryRules(),
@@ -93,21 +100,36 @@ class MonthlyBudgetCalculator @Inject constructor(
                     planningMonth = it.planningMonth(expense.statementRules)
                 )
             }
+            val computations = computedMonths.associateWith { month ->
+                buildSummary(month, income, expense, planned, preparedExpenses, rates)
+            }
             months.map { month ->
-                buildSummary(month, today, income, expense, planned, preparedExpenses, rates)
+                val computation = computations.getValue(month)
+                val baseline = (CategoryTrendRules.BASELINE_MONTHS downTo 1)
+                    .map { computations.getValue(month.minusMonths(it.toLong())).summary }
+                computation.summary.copy(
+                    warnings = BudgetWarningRules.build(
+                        month = month,
+                        today = today,
+                        remainingAfterFixedPayments = computation.summary.remainingAfterFixedPayments,
+                        categorySummaries = computation.summary.categorySummaries,
+                        cardPayments = computation.cardPayments,
+                        loanPayments = computation.loanPayments,
+                        categorySpikes = CategoryTrendRules.detectSpikes(computation.summary, baseline)
+                    )
+                )
             }
         }
     }
 
     private fun buildSummary(
         month: YearMonth,
-        today: LocalDate,
         income: MonthlyIncomeInputs,
         expense: MonthlyExpenseInputs,
         planned: PlannedPaymentInputs,
         preparedExpenses: List<PreparedExpense>,
         rates: Map<String, ExchangeRateResult>
-    ): MonthlyBudgetSummary {
+    ): MonthComputation {
         val applicableSalary = SalaryRules.effectiveForMonth(income.salaryRules, month)?.amount ?: 0L
         val savingGoalAmount = income.savingGoals.firstOrNull { it.yearMonth == month }?.amount ?: 0L
         val additionalIncomeAmount = income.incomes
@@ -172,20 +194,15 @@ class MonthlyBudgetCalculator @Inject constructor(
             )
         )
 
-        return summary.copy(
-            warnings = BudgetWarningRules.build(
+        return MonthComputation(
+            summary = summary,
+            cardPayments = buildCardPaymentsDue(
                 month = month,
-                today = today,
-                remainingAfterFixedPayments = summary.remainingAfterFixedPayments,
-                categorySummaries = summary.categorySummaries,
-                cardPayments = buildCardPaymentsDue(
-                    month = month,
-                    plannedMonthExpenses = plannedMonthExpenses,
-                    statementRules = expense.statementRules,
-                    statementPayments = expense.statementPayments
-                ),
-                loanPayments = loans
-            )
+                plannedMonthExpenses = plannedMonthExpenses,
+                statementRules = expense.statementRules,
+                statementPayments = expense.statementPayments
+            ),
+            loanPayments = loans
         )
     }
 
@@ -298,6 +315,13 @@ private fun List<CreditCardStatementRule>.effectiveFor(
         .filter { it.accountId == accountId && !it.effectiveFromMonth.isAfter(month) }
         .maxByOrNull { it.effectiveFromMonth }
 }
+
+/** A month's summary before warnings, plus the payment details the warning rules need. */
+private data class MonthComputation(
+    val summary: MonthlyBudgetSummary,
+    val cardPayments: List<CreditCardPaymentDue>,
+    val loanPayments: List<LoanMonthlyPayment>
+)
 
 /** An expense with the derived values every month summary needs, computed once per emission. */
 private data class PreparedExpense(

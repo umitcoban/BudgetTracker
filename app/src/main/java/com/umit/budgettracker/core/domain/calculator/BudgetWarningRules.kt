@@ -2,6 +2,7 @@ package com.umit.budgettracker.core.domain.calculator
 
 import com.umit.budgettracker.core.domain.model.BudgetWarning
 import com.umit.budgettracker.core.domain.model.BudgetWarningType
+import com.umit.budgettracker.core.domain.model.CategorySpike
 import com.umit.budgettracker.core.domain.model.CategorySummary
 import com.umit.budgettracker.core.domain.model.LoanMonthlyPayment
 import com.umit.budgettracker.core.util.MoneyFormatter
@@ -22,7 +23,8 @@ data class CreditCardPaymentDue(
 /**
  * Builds the ordered warning list shown on the Dashboard. Ordering is by severity so callers
  * can safely show only the first entry:
- * negative remaining > exceeded category budget > card due > loan due > category at 80%.
+ * negative remaining > exceeded category budget > card due > loan due > spending spike >
+ * category at 80%.
  */
 object BudgetWarningRules {
     const val UPCOMING_PAYMENT_WINDOW_DAYS = 7L
@@ -34,7 +36,8 @@ object BudgetWarningRules {
         remainingAfterFixedPayments: Long,
         categorySummaries: List<CategorySummary>,
         cardPayments: List<CreditCardPaymentDue>,
-        loanPayments: List<LoanMonthlyPayment>
+        loanPayments: List<LoanMonthlyPayment>,
+        categorySpikes: List<CategorySpike> = emptyList()
     ): List<BudgetWarning> {
         val warnings = mutableListOf<BudgetWarning>()
 
@@ -85,6 +88,15 @@ object BudgetWarningRules {
                         "${MoneyFormatter.format(payment.amount)}."
                 )
             }
+
+        categorySpikes.forEach { spike ->
+            warnings += BudgetWarning(
+                type = BudgetWarningType.CATEGORY_SPENDING_SPIKE,
+                message = "${spike.categoryName} harcaması son ${CategoryTrendRules.BASELINE_MONTHS} ay " +
+                    "ortalamasının %${spike.changePercent} üzerinde " +
+                    "(${MoneyFormatter.format(spike.amount)} / ort. ${MoneyFormatter.format(spike.baselineAmount)})."
+            )
+        }
 
         budgeted
             .filter { (summary, percent) ->

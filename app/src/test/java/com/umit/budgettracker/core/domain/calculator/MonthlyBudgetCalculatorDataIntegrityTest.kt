@@ -177,7 +177,8 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
 
         val summary = calculator(expenseRepository = repository).getSummariesForMonths(listOf(july)).first().single()
 
-        assertEquals(LocalDate.of(2026, 5, 1)..LocalDate.of(2026, 7, 31), repository.requestedRange)
+        // 3 baseline months for spike detection + 2 months of planning shift before July.
+        assertEquals(LocalDate.of(2026, 2, 1)..LocalDate.of(2026, 7, 31), repository.requestedRange)
         assertEquals(10_000L, summary.creditCardPaymentAmount)
     }
 

@@ -51,11 +51,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.umit.budgettracker.core.domain.model.CategorySummary
+import com.umit.budgettracker.core.domain.model.CategoryTrend
 import com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary
 import com.umit.budgettracker.core.ui.IconMapper
 import com.umit.budgettracker.core.ui.components.FinanceCard
 import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
 import com.umit.budgettracker.core.ui.components.MetricTile
+import com.umit.budgettracker.core.ui.components.StatusPill
 import com.umit.budgettracker.core.util.DateUtils
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
@@ -125,7 +127,7 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
 
                     when (selectedTab) {
                         0 -> OverviewReport(state)
-                        1 -> ExpenseReport(state.currentMonth, state.previousMonth)
+                        1 -> ExpenseReport(state.currentMonth, state.previousMonth, state.categoryTrends)
                         else -> CashFlowReport(state)
                     }
                 }
@@ -174,7 +176,8 @@ private fun OverviewReport(state: ReportsUiState.Success) {
 @Composable
 private fun ExpenseReport(
     current: MonthlyBudgetSummary,
-    previous: MonthlyBudgetSummary
+    previous: MonthlyBudgetSummary,
+    categoryTrends: List<CategoryTrend>
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -206,6 +209,16 @@ private fun ExpenseReport(
                 CategoryReportRow(category, current.totalExpenseAmount)
             }
         }
+        val trendsWithHistory = categoryTrends.filter { trend -> trend.points.any { it.amount > 0L } }
+        if (trendsWithHistory.isNotEmpty()) {
+            item {
+                FinanceSectionHeader(
+                    title = "Kategori eğilimi",
+                    subtitle = "Son ${trendsWithHistory.first().points.size} ayda kategori bazında değişim"
+                )
+            }
+            item { CategoryTrendCard(trendsWithHistory.take(MAX_TREND_ROWS)) }
+        }
         item {
             FinanceSectionHeader(
                 title = "Ödeme kanalları",
@@ -214,6 +227,83 @@ private fun ExpenseReport(
         }
         item { SpendingChannelsCard(current) }
     }
+}
+
+private const val MAX_TREND_ROWS = 6
+
+@Composable
+private fun CategoryTrendCard(trends: List<CategoryTrend>) {
+    FinanceCard {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            trends.forEachIndexed { index, trend ->
+                CategoryTrendRow(trend)
+                if (index < trends.lastIndex) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryTrendRow(trend: CategoryTrend) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            IconMapper.getIcon(trend.iconName),
+            contentDescription = null,
+            tint = Color(trend.colorValue),
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(trend.categoryName, style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Geçen ay ${MoneyFormatter.format(trend.previousAmount)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(MoneyFormatter.format(trend.currentAmount), style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            CategoryChangePill(trend.changePercent, trend.currentAmount > 0L)
+        }
+    }
+}
+
+@Composable
+private fun CategoryChangePill(changePercent: Int?, hasSpending: Boolean) {
+    val (label, container, content) = when {
+        changePercent == null && hasSpending -> Triple(
+            "Yeni",
+            MaterialTheme.colorScheme.secondaryContainer,
+            MaterialTheme.colorScheme.onSecondaryContainer
+        )
+        changePercent == null -> Triple(
+            "Harcama yok",
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        changePercent > 0 -> Triple(
+            "+%$changePercent",
+            MaterialTheme.colorScheme.errorContainer,
+            MaterialTheme.colorScheme.onErrorContainer
+        )
+        changePercent < 0 -> Triple(
+            "−%${changePercent.absoluteValue}",
+            MaterialTheme.colorScheme.primaryContainer,
+            MaterialTheme.colorScheme.onPrimaryContainer
+        )
+        else -> Triple(
+            "Aynı",
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+    StatusPill(text = label, containerColor = container, contentColor = content)
 }
 
 @Composable

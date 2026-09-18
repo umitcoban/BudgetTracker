@@ -2,7 +2,9 @@ package com.umit.budgettracker.feature.reports
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.umit.budgettracker.core.domain.calculator.CategoryTrendRules
 import com.umit.budgettracker.core.domain.calculator.MonthlyBudgetCalculator
+import com.umit.budgettracker.core.domain.model.CategoryTrend
 import com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary
 import com.umit.budgettracker.core.domain.model.NetWorthSnapshot
 import com.umit.budgettracker.core.domain.repository.NetWorthRepository
@@ -33,6 +35,7 @@ class ReportsViewModel @Inject constructor(
                     currentMonth = summaries.last(),
                     previousMonth = summaries[summaries.size - 2],
                     netWorth = netWorth,
+                    categoryTrends = CategoryTrendRules.buildTrends(summaries),
                     trend = summaries.map { summary ->
                         MonthlyTrendPoint(
                             month = summary.yearMonth,
@@ -68,6 +71,7 @@ sealed interface ReportsUiState {
         val currentMonth: MonthlyBudgetSummary,
         val previousMonth: MonthlyBudgetSummary,
         val netWorth: NetWorthSnapshot?,
+        val categoryTrends: List<CategoryTrend>,
         val trend: List<MonthlyTrendPoint>
     ) : ReportsUiState
 }
