@@ -57,6 +57,7 @@ feature/*/XxxScreen.kt          Compose, presentation only, collects StateFlow
 ### Export / import
 
 - `core/export/ExportDto.kt` (DTOs), `JsonExportService.kt`, `CsvExportService.kt`, `PdfExportService.kt`, `FullBackupService.kt` (ZIP with `data.json` + `attachments/`); `core/dataimport/JsonImportService.kt` is the reverse; `core/database/DatabaseBackupService.kt` handles raw DB files.
+- The PDF report takes a `PdfReportData` (selected month + 12-month history + category trends, built in `SettingsViewModel` from `getSummariesForMonths`) and draws with `android.graphics` via the helpers in `core/export/PdfCharts.kt` — the Canvas twins of `core/ui/charts`. It cannot run in JVM unit tests; verify on an emulator (Ayarlar → PDF Rapor) and render the file to check layout.
 - The JSON schema version is a literal in two places that must move together: `JsonExportService` (`schemaVersion = N`) and the `dto.schemaVersion > N` guard in `JsonImportService`. Import gates each optional section with `if (dto.schemaVersion >= k)`.
 - `app/proguard-rules.pro` keeps `core.export.**`, `core.dataimport.**`, `core.database.entity.**`, and `core.database.dao.**` wholesale; new serializable DTOs outside those packages need their own keep rule.
 
