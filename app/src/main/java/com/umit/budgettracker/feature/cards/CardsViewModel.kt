@@ -3,6 +3,8 @@ package com.umit.budgettracker.feature.cards
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.umit.budgettracker.core.domain.calculator.CreditCardStatementCalculator
+import com.umit.budgettracker.core.domain.calculator.ExpenseAdjustmentRules
+import com.umit.budgettracker.core.domain.calculator.netAmount
 import com.umit.budgettracker.core.domain.model.AccountType
 import com.umit.budgettracker.core.domain.model.CreditCardStatementPayment
 import com.umit.budgettracker.core.domain.model.CreditCardStatementSummary
@@ -57,11 +59,11 @@ class CardsViewModel @Inject constructor(
                 statementPaymentRepository.observePaymentsForMonth(month),
                 statementRuleRepository.observeAllRules()
             ) { accounts, expenses, adjustments, payments, rules ->
-                val adjustmentsByExpenseId = adjustments.groupBy { it.expenseId }
+                val adjustmentsByExpenseId = ExpenseAdjustmentRules.groupByExpense(adjustments)
                 accounts
                     .filter { it.type == AccountType.CREDIT_CARD }
                     .map { account ->
-                        val summary = statementCalculator.calculateStatement(account, month, expenses, rules)
+                        val summary = statementCalculator.calculateStatement(account, month, expenses, rules, adjustments)
                         CardStatementUiModel(
                             accountId = account.id,
                             summary = summary,
@@ -130,8 +132,4 @@ data class CardStatementUiModel(
     val isPaid: Boolean get() = payment?.isPaid == true
     val totalAmount: Long get() = summary.expenses.sumOf { it.netAmount(adjustmentsByExpenseId) }
     fun netAmount(expense: Expense): Long = expense.netAmount(adjustmentsByExpenseId)
-}
-
-private fun Expense.netAmount(adjustmentsByExpenseId: Map<Long, List<ExpenseAdjustment>>): Long {
-    return (amount - adjustmentsByExpenseId[id].orEmpty().sumOf { it.amount }).coerceAtLeast(0L)
 }

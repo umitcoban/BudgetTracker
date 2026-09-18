@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `CODEBASE_CONTEXT.md` is the authoritative product-rules document (money as `Long` minor units, local-only privacy, Turkish UI, effective-month salary/statement rules, duplicate prevention, export/import schema history, the cross-layer change checklist). Read it before changing any domain model, persisted data, or financial lifecycle. This file does not repeat it.
 
-Caveat: its "Current Build Snapshot" section is stale — `gradle/libs.versions.toml` and `app/build.gradle.kts` are the source of truth for versions (currently AGP 9.x, Kotlin 2.2.x, Room 2.8.x, Hilt 2.60.x, Gradle 9.5, JDK 21 toolchain via foojay).
+`gradle/libs.versions.toml` and `app/build.gradle.kts` remain the source of truth for versions; update the "Current Build Snapshot" section there when bumping them.
 
 ## Commands
 
