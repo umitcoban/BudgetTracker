@@ -84,8 +84,8 @@ fun SalaryScreen(
             SalaryRuleDialog(
                 existingRule = null,
                 onDismiss = { showAddDialog = false },
-                onConfirm = { amount, month, note ->
-                    viewModel.saveSalaryRule(null, amount, month, note)
+                onConfirm = { amount, month, note, payDay ->
+                    viewModel.saveSalaryRule(null, amount, month, note, payDay)
                     showAddDialog = false
                 }
             )
@@ -94,8 +94,8 @@ fun SalaryScreen(
             SalaryRuleDialog(
                 existingRule = rule,
                 onDismiss = { editingRule = null },
-                onConfirm = { amount, month, note ->
-                    viewModel.saveSalaryRule(rule, amount, month, note)
+                onConfirm = { amount, month, note, payDay ->
+                    viewModel.saveSalaryRule(rule, amount, month, note, payDay)
                     editingRule = null
                 }
             )
@@ -132,7 +132,8 @@ fun SalaryRuleRow(rule: SalaryRule, onEdit: () -> Unit, onDelete: () -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = MoneyFormatter.format(rule.amount), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(
-                    text = "${rule.effectiveStartMonth} ayından itibaren",
+                    text = "${rule.effectiveStartMonth} ayından itibaren" +
+                        (rule.payDay?.let { " · her ayın $it'i" } ?: ""),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 if (!rule.note.isNullOrBlank()) {
@@ -153,14 +154,17 @@ fun SalaryRuleRow(rule: SalaryRule, onEdit: () -> Unit, onDelete: () -> Unit) {
 fun SalaryRuleDialog(
     existingRule: SalaryRule?,
     onDismiss: () -> Unit,
-    onConfirm: (Long, YearMonth, String?) -> Unit
+    onConfirm: (Long, YearMonth, String?, Int?) -> Unit
 ) {
     var amountText by remember { mutableStateOf(existingRule?.amount?.formatMinor().orEmpty()) }
     var monthText by remember { mutableStateOf(existingRule?.effectiveStartMonth?.toString() ?: YearMonth.now().toString()) }
+    var payDayText by remember { mutableStateOf(existingRule?.payDay?.toString().orEmpty()) }
     var note by remember { mutableStateOf(existingRule?.note.orEmpty()) }
     val amount = MoneyFormatter.parse(amountText)
     val month = runCatching { YearMonth.parse(monthText) }.getOrNull()
-    val isValid = (amount ?: 0L) > 0 && month != null
+    val payDay = payDayText.trim().toIntOrNull()
+    val payDayValid = payDayText.isBlank() || payDay in 1..31
+    val isValid = (amount ?: 0L) > 0 && month != null && payDayValid
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -169,6 +173,14 @@ fun SalaryRuleDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = amountText, onValueChange = { amountText = it }, label = { Text("Miktar (TL)") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = monthText, onValueChange = { monthText = it }, label = { Text("Geçerli olacağı ay (YYYY-MM)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = payDayText,
+                    onValueChange = { payDayText = it },
+                    label = { Text("Maaş günü (1-31, opsiyonel)") },
+                    supportingText = { Text("Nakit akışı takviminde maaşın yattığı gün; boşsa ay başı varsayılır.") },
+                    isError = !payDayValid,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Not (Opsiyonel)") }, modifier = Modifier.fillMaxWidth())
                 Text(
                     text = if (existingRule == null) {
@@ -185,7 +197,7 @@ fun SalaryRuleDialog(
             TextButton(
                 enabled = isValid,
                 onClick = {
-                    onConfirm(amount!!, month!!, note.ifBlank { null })
+                    onConfirm(amount!!, month!!, note.ifBlank { null }, payDay)
                 }
             ) {
                 Text("Kaydet")

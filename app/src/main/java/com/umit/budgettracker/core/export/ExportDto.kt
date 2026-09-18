@@ -30,7 +30,13 @@ data class BudgetTrackerExportDto(
 )
 
 @Serializable
-data class SalaryRuleDto(val id: Long, val amount: Long, val effectiveStartMonth: String, val note: String?)
+data class SalaryRuleDto(
+    val id: Long,
+    val amount: Long,
+    val effectiveStartMonth: String,
+    val note: String?,
+    val payDay: Int? = null
+)
 
 @Serializable
 data class IncomeDto(val id: Long, val title: String, val amount: Long, val incomeDate: Long, val type: String, val note: String?)

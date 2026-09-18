@@ -115,4 +115,23 @@ class JsonSerializationTest {
 
         assertEquals(dto.loanPayments, decoded.loanPayments)
     }
+
+    @Test
+    fun salaryRuleWithoutPayDay_fromSchema13_decodesAsNull() {
+        val schema13Rule = """{"id":1,"amount":9000000,"effectiveStartMonth":"2026-01","note":null}"""
+
+        val decoded = json.decodeFromString<SalaryRuleDto>(schema13Rule)
+
+        assertEquals(null, decoded.payDay)
+    }
+
+    @Test
+    fun salaryRulePayDay_roundTripsInSchema14() {
+        val dto = SalaryRuleDto(id = 1L, amount = 9_000_000L, effectiveStartMonth = "2026-01", note = null, payDay = 15)
+
+        val decoded = json.decodeFromString<SalaryRuleDto>(json.encodeToString(dto))
+
+        assertEquals(15, decoded.payDay)
+        assertEquals(dto, decoded)
+    }
 }

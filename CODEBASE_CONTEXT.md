@@ -40,8 +40,8 @@ BudgetTracker is a local-only personal finance and monthly budgeting app. It is 
 - Compose BOM: 2024.05.00
 - Source of truth for versions: `gradle/libs.versions.toml`, `gradle/wrapper/gradle-wrapper.properties`, `gradle/gradle-daemon-jvm.properties`
 - Database name: `budget_tracker_db`
-- Room database version: 15
-- JSON export schema version: 13
+- Room database version: 16
+- JSON export schema version: 14
 
 ## Non-Negotiable Product Rules
 
@@ -251,7 +251,7 @@ JSON export/import:
 
 - `appName` must be `BudgetTracker`.
 - Unsupported future schema versions must be rejected.
-- Current JSON schema version is 13.
+- Current JSON schema version is 14.
 - Attachment metadata is included in schema version 2.
 - Credit card statement payment status is included in schema version 3.
 - Expense adjustments/refunds are included in schema version 4.
@@ -264,7 +264,9 @@ JSON export/import:
 - Loan early-close date is included in schema version 11.
 - Loan payment records are included in schema version 12.
 - Credit-card statement and due-date rules are included in schema version 13.
-- Replace-mode imports must be confirmed by the user.
+- Salary rule pay day (`payDay`, nullable) is included in schema version 14.
+- Replace-mode imports must be confirmed by the user. JSON import, raw DB restore and full ZIP restore all go through the same confirmation dialog in Settings.
+- Exports are written with `encodeDefaults = true`, so `appName` and empty sections are always present in the file.
 
 ## Credit Card Statement Rules
 
@@ -292,6 +294,7 @@ Rules:
 - Past months must not change when a future salary rule is added.
 - There must be only one salary rule for the same effective month.
 - If the same effective month is saved again, the existing rule is updated instead of creating a duplicate.
+- A rule may carry a nullable `payDay` (1–31). It only affects the cash-flow calendar (salary lands on that day; day 1 when null) — monthly totals never depend on it. Database migration `15 -> 16` adds the column.
 
 Example:
 
@@ -371,7 +374,7 @@ Percentages are integer arithmetic. Upcoming-payment rules only apply when the s
 
 The cash-flow calendar lists cash movements, not accounting entries:
 
-- Salary is an inflow on day 1 of the month (salary rules have no pay day) and one-off incomes on their dates.
+- Salary is an inflow on the rule's `payDay` (day 1 when unset) and one-off incomes on their dates.
 - Expenses paid from cash/bank accounts are outflows on their dates; credit-card purchases are **not** listed — the card's statement payment on its due date is the outflow.
 - Planned subscription, loan and fixed-expense payments appear on their days until processed.
 
@@ -542,7 +545,10 @@ Full ZIP import:
 
 A subscription record is a rule. A monthly subscription payment is planned until the user explicitly marks it as paid or processes it into expenses.
 
-Subscriptions must not silently generate monthly expenses in the background.
+Subscription payments are processed into expenses in two ways, both idempotent per subscription and month:
+
+- Explicitly, from the Subscriptions screen ("Harcamalara işle").
+- Automatically by `SyncDueSubscriptionExpensesUseCase` on app start and on the Subscriptions screen: every contributing month whose billing day has passed and has no linked expense yet gets one. This is a deliberate product decision (2026-09); it must stay idempotent and must never touch months that already have a linked expense.
 
 When marking a subscription payment as paid for a selected month:
 
@@ -677,6 +683,16 @@ Examples:
 
 - Loan early close: store a nullable close date, mark the loan inactive so future projections stop, preserve historical expenses, prevent deletion when `expenses.loanId` still references the loan, and include the close date in JSON schema version 11.
 - A new nullable Room column: migrate with `ALTER TABLE ... ADD COLUMN`, retain all old values, and confirm the new `app/schemas/.../<version>.json` file is generated.
+
+## Migration Verification
+
+`app/src/androidTest/.../MigrationTest.kt` replays the committed schema history (`app/schemas/`) with Room's `MigrationTestHelper` on a device/emulator: it seeds rows at an old version, runs `DatabaseModule.migrations`, and lets Room validate the result. Run it before shipping any schema change:
+
+```bash
+./gradlew :app:connectedDebugAndroidTest
+```
+
+Note: AGP uninstalls the app from the device after the run, which wipes that device's app data — do not run it against a device whose data you care about.
 
 ## Verification Commands
 

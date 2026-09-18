@@ -35,7 +35,7 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
+        ).addMigrations(*migrations)
             .addCallback(object : RoomDatabase.Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
                 super.onCreate(db)
@@ -45,6 +45,15 @@ object DatabaseModule {
                 }
             }
         }).build()
+    }
+
+    /** Every schema step in order; exposed so the instrumented MigrationTest can replay them. */
+    internal val migrations: Array<Migration> by lazy {
+        arrayOf(
+            MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+            MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
+            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16
+        )
     }
 
     private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -220,6 +229,12 @@ object DatabaseModule {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("CREATE TABLE IF NOT EXISTS `credit_card_statement_rules` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `accountId` INTEGER NOT NULL, `effectiveFromMonth` TEXT NOT NULL, `statementDay` INTEGER NOT NULL, `dueDay` INTEGER NOT NULL)")
             db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_credit_card_statement_rules_accountId_effectiveFromMonth` ON `credit_card_statement_rules` (`accountId`, `effectiveFromMonth`)")
+        }
+    }
+
+    private val MIGRATION_15_16 = object : Migration(15, 16) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            addNullableColumnIfMissing(db, "salary_rules", "payDay", "INTEGER")
         }
     }
 
