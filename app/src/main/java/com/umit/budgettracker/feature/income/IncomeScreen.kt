@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -71,18 +72,23 @@ fun IncomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Ek Gelirler") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
+                title = {
+                    Column {
+                        Text("Ek Gelirler", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "Yalnızca işlem ayını etkileyen gelirler",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 },
-                actions = {
-                    MonthSelector(
-                        selectedMonth = selectedMonth,
-                        onMonthChange = { viewModel.previousMonth() },
-                        onNextMonth = { viewModel.nextMonth() }
-                    )
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Özete dön"
+                        )
+                    }
                 }
             )
         },
@@ -97,49 +103,73 @@ fun IncomeScreen(
             }
         }
     ) { padding ->
-        if (incomes.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Bu ay için ek gelir yok.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        } else {
-            val groupedIncomes = incomes
-                .groupBy { it.incomeDate }
-                .toSortedMap(compareByDescending { it })
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                item {
-                    IncomeMonthSummary(incomes)
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding)
+        ) {
+            MonthSelector(
+                selectedMonth = selectedMonth,
+                onMonthChange = viewModel::previousMonth,
+                onNextMonth = viewModel::nextMonth,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            )
+            Spacer(Modifier.height(8.dp))
+
+            if (incomes.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    FinanceCard {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("Bu ay için ek gelir yok", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "Eklediğin gelir yalnızca seçili ayın bütçesine yansır.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
-                item {
-                    FinanceSectionHeader(
-                        title = "Gelir hareketleri",
-                        subtitle = "${incomes.size} kayıt"
-                    )
-                }
-                groupedIncomes.forEach { (date, dayIncomes) ->
+            } else {
+                val groupedIncomes = incomes
+                    .groupBy { it.incomeDate }
+                    .toSortedMap(compareByDescending { it })
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     item {
-                        Text(
-                            date.format(DateTimeFormatter.ofPattern("d MMMM")),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp)
+                        IncomeMonthSummary(incomes)
+                    }
+                    item {
+                        FinanceSectionHeader(
+                            title = "Gelir hareketleri",
+                            subtitle = "${incomes.size} kayıt"
                         )
                     }
-                    items(dayIncomes) { income ->
-                        IncomeRow(
-                            income = income,
-                            onEdit = {
-                                editingIncome = income
-                                showDialog = true
-                            },
-                            onDelete = { viewModel.deleteIncome(income) }
-                        )
+                    groupedIncomes.forEach { (date, dayIncomes) ->
+                        item {
+                            Text(
+                                date.format(DateTimeFormatter.ofPattern("d MMMM")),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        items(dayIncomes) { income ->
+                            IncomeRow(
+                                income = income,
+                                onEdit = {
+                                    editingIncome = income
+                                    showDialog = true
+                                },
+                                onDelete = { viewModel.deleteIncome(income) }
+                            )
+                        }
                     }
                 }
             }
@@ -321,7 +351,7 @@ private fun IncomeDialog(
                 OutlinedTextField(
                     value = incomeDateText,
                     onValueChange = { incomeDateText = it },
-                    label = { Text("Tarih (YYYY-MM-DD)") },
+                    label = { Text("Gelirin alındığı tarih (YYYY-MM-DD)") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 ExposedDropdownMenuBox(
@@ -356,6 +386,11 @@ private fun IncomeDialog(
                     onValueChange = { note = it },
                     label = { Text("Not") },
                     modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "Bu gelir yalnızca seçtiğin tarihin bulunduğu ayın bütçesine eklenir; geçmiş ve gelecek aylara tekrarlanmaz.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         },

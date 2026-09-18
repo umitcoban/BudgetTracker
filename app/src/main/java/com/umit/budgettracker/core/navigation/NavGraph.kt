@@ -49,10 +49,10 @@ fun NavGraph(
             SettingsScreen(onNavigate = { navController.navigate(it) })
         }
         composable(Screen.SalaryManagement.route) {
-            SalaryScreen(onBack = { navController.popBackStack() })
+            SalaryScreen(onBack = { navController.navigateBackToDashboard() })
         }
         composable(Screen.Income.route) {
-            IncomeScreen(onBack = { navController.popBackStack() })
+            IncomeScreen(onBack = { navController.navigateBackToDashboard() })
         }
         composable(Screen.FixedExpenses.route) {
             FixedExpensesScreen(onBack = { navController.popBackStack() })
@@ -67,7 +67,7 @@ fun NavGraph(
             LoansScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.CashFlow.route) {
-            CashFlowScreen(onBack = { navController.popBackStack() })
+            CashFlowScreen(onBack = { navController.navigateBackToDashboard() })
         }
         composable(Screen.CategoryBudgets.route) {
             CategoryBudgetsScreen(onBack = { navController.popBackStack() })
