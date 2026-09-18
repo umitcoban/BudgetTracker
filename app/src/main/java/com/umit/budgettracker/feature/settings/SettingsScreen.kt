@@ -155,7 +155,7 @@ fun SettingsScreen(
             }
             item {
                 SettingsItem(
-                    title = "PDF Rapor Dışa Aktar (Bu Ay)",
+                    title = "PDF Rapor Dışa Aktar (Bu Ay + Son 12 Ay)",
                     icon = Icons.Default.PictureAsPdf,
                     enabled = !isLoading,
                     onClick = { createPdfLauncher.launch("budgettracker_report.pdf") }
