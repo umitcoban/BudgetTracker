@@ -2,8 +2,12 @@ package com.umit.budgettracker.core.domain.calculator
 
 import com.umit.budgettracker.core.domain.model.*
 import com.umit.budgettracker.core.domain.repository.*
+import com.umit.budgettracker.core.network.ExchangeRateResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 import java.time.YearMonth
 import javax.inject.Inject
 
@@ -15,130 +19,200 @@ class MonthlyBudgetCalculator @Inject constructor(
     private val budgetRepository: CategoryBudgetRepository,
     private val adjustmentRepository: ExpenseAdjustmentRepository,
     private val statementRuleRepository: CreditCardStatementRuleRepository,
+    private val statementPaymentRepository: CreditCardStatementPaymentRepository,
     private val subscriptionCalculator: SubscriptionMonthlyCalculator,
     private val loanCalculator: LoanMonthlyCalculator,
     private val fixedExpenseCalculator: FixedExpenseMonthlyCalculator
 ) {
     fun getSummaryForMonth(month: YearMonth): Flow<MonthlyBudgetSummary> {
+        return getSummariesForMonths(listOf(month)).map { it.single() }
+    }
+
+    /**
+     * Summaries for every month in [months], in the same order, computed from a single set of
+     * database subscriptions. Prefer this over several [getSummaryForMonth] calls: each of those
+     * opens its own Room queries and re-fetches exchange rates independently.
+     */
+    fun getSummariesForMonths(months: List<YearMonth>): Flow<List<MonthlyBudgetSummary>> {
+        if (months.isEmpty()) return flowOf(emptyList())
+        val firstMonth = months.min()
+        val lastMonth = months.max()
+
         val incomeFlow = combine(
             salaryRepository.observeAllSalaryRules(),
-            savingGoalRepository.observeSavingGoalForMonth(month),
-            incomeRepository.observeIncomesForMonth(month)
-        ) { salaryRules, savingGoal, incomes ->
+            savingGoalRepository.observeAllSavingGoals(),
+            incomeRepository.observeAllIncomes()
+        ) { salaryRules, savingGoals, incomes ->
             MonthlyIncomeInputs(
                 salaryRules = salaryRules,
-                savingGoal = savingGoal,
+                savingGoals = savingGoals,
                 incomes = incomes
             )
         }
 
         val expenseFlow = combine(
-            expenseRepository.observeAllExpenses(),
-            budgetRepository.observeBudgetsForMonth(month),
+            expenseRepository.observeExpensesForDateRange(
+                startDate = firstMonth.minusMonths(MAX_PLANNING_MONTH_SHIFT).atDay(1),
+                endDate = lastMonth.atEndOfMonth()
+            ),
+            budgetRepository.observeAllBudgets(),
             adjustmentRepository.observeAllAdjustments(),
-            statementRuleRepository.observeAllRules()
-        ) { expenses, budgets, adjustments, statementRules ->
+            statementRuleRepository.observeAllRules(),
+            statementPaymentRepository.observeAllPayments()
+        ) { expenses, budgets, adjustments, statementRules, statementPayments ->
             MonthlyExpenseInputs(
                 expenses = expenses,
                 budgets = budgets,
                 adjustments = adjustments,
-                statementRules = statementRules
+                statementRules = statementRules,
+                statementPayments = statementPayments
             )
         }
 
-        val baseFlow = combine(
-            incomeFlow,
-            expenseFlow
-        ) { incomeInputs, expenseInputs ->
-            MonthlyBudgetInputs(
-                salaryRules = incomeInputs.salaryRules,
-                savingGoal = incomeInputs.savingGoal,
-                incomes = incomeInputs.incomes,
-                expenses = expenseInputs.expenses,
-                budgets = expenseInputs.budgets,
-                adjustments = expenseInputs.adjustments,
-                statementRules = expenseInputs.statementRules
+        val plannedFlow = combine(
+            subscriptionCalculator.observeInputs(),
+            loanCalculator.observeInputs(),
+            fixedExpenseCalculator.observeInputs()
+        ) { subscriptions, loans, fixedExpenses ->
+            PlannedPaymentInputs(
+                subscriptions = subscriptions,
+                loans = loans,
+                fixedExpenses = fixedExpenses
             )
         }
 
-        return combine(
-            baseFlow,
-            subscriptionCalculator.getPaymentsForMonth(month),
-            loanCalculator.getPaymentsForMonth(month),
-            fixedExpenseCalculator.getPaymentsForMonth(month)
-        ) { base, subscriptions, loans, fixedExpenses ->
-            val applicableSalary = SalaryRules.effectiveForMonth(base.salaryRules, month)?.amount ?: 0L
-
-            val calendarMonthExpenses = base.expenses.filter { YearMonth.from(it.expenseDate) == month }
-            val plannedMonthExpenses = base.expenses.filter { it.planningMonth(base.statementRules) == month }
-            val adjustmentsByExpenseId = base.adjustments.groupBy { it.expenseId }
-
-            val totalExpenses = plannedMonthExpenses.sumOf { it.netAmount(adjustmentsByExpenseId) }
-            val savingGoalAmount = base.savingGoal?.amount ?: 0L
-            val additionalIncomeAmount = base.incomes.sumOf { it.amount }
-            val totalCardExpense = calendarMonthExpenses
-                .filter { it.paymentSourceType == AccountType.CREDIT_CARD }
-                .sumOf { it.netAmount(adjustmentsByExpenseId) }
-            val creditCardPaymentAmount = plannedMonthExpenses
-                .filter { it.paymentSourceType == AccountType.CREDIT_CARD }
-                .sumOf { it.netAmount(adjustmentsByExpenseId) }
-            val directExpenses = plannedMonthExpenses
-                .filter { it.paymentSourceType != AccountType.CREDIT_CARD }
-                .sumOf { it.netAmount(adjustmentsByExpenseId) }
-
-            val totalSubscriptionsUnpaid = subscriptions.filter { !it.isPaid }.sumOf { it.amount }
-            val totalSubscriptionsPaid = plannedMonthExpenses
-                .filter { it.subscriptionId != null }
-                .sumOf { it.netAmount(adjustmentsByExpenseId) }
-            val totalSubscriptionsPlanned = subscriptions.sumOf { it.amount }
-            val totalLoans = loans.sumOf { it.amount }
-            val paidFixedExpenseIds = plannedMonthExpenses.mapNotNull { it.fixedExpenseId }.toSet()
-            val totalFixedExpenses = fixedExpenses
-                .filter { it.fixedExpenseId !in paidFixedExpenseIds }
-                .sumOf { it.amount }
-            val suggestedSaving = ((applicableSalary + additionalIncomeAmount - totalExpenses - totalSubscriptionsUnpaid - totalLoans - totalFixedExpenses) / 2)
-                .coerceAtLeast(0L)
-
-            MonthlyBudgetSummary(
-                yearMonth = month,
-                salaryAmount = applicableSalary,
-                additionalIncomeAmount = additionalIncomeAmount,
-                savingGoalAmount = savingGoalAmount,
-                totalExpenseAmount = totalExpenses,
-                calendarCreditCardSpendingAmount = totalCardExpense,
-                creditCardPaymentAmount = creditCardPaymentAmount,
-                directExpenseAmount = directExpenses,
-                subscriptionAmount = totalSubscriptionsUnpaid,
-                subscriptionPlannedAmount = totalSubscriptionsPlanned,
-                subscriptionPaidAmount = totalSubscriptionsPaid,
-                subscriptionUnpaidPlannedAmount = totalSubscriptionsUnpaid,
-                loanPaymentAmount = totalLoans,
-                fixedExpenseAmount = totalFixedExpenses,
-                suggestedSavingAmount = suggestedSaving,
-                categorySummaries = buildCategorySummaries(
-                    plannedMonthExpenses = plannedMonthExpenses,
-                    budgets = base.budgets,
-                    adjustmentsByExpenseId = adjustmentsByExpenseId
+        return combine(incomeFlow, expenseFlow, plannedFlow) { income, expense, planned ->
+            val rates = subscriptionCalculator.resolveRates(planned.subscriptions, months)
+            val today = LocalDate.now()
+            val adjustmentsByExpenseId = expense.adjustments.groupBy { it.expenseId }
+            val preparedExpenses = expense.expenses.map {
+                PreparedExpense(
+                    expense = it,
+                    netAmount = it.netAmount(adjustmentsByExpenseId),
+                    calendarMonth = YearMonth.from(it.expenseDate),
+                    planningMonth = it.planningMonth(expense.statementRules)
                 )
-            )
+            }
+            months.map { month ->
+                buildSummary(month, today, income, expense, planned, preparedExpenses, rates)
+            }
         }
+    }
+
+    private fun buildSummary(
+        month: YearMonth,
+        today: LocalDate,
+        income: MonthlyIncomeInputs,
+        expense: MonthlyExpenseInputs,
+        planned: PlannedPaymentInputs,
+        preparedExpenses: List<PreparedExpense>,
+        rates: Map<String, ExchangeRateResult>
+    ): MonthlyBudgetSummary {
+        val applicableSalary = SalaryRules.effectiveForMonth(income.salaryRules, month)?.amount ?: 0L
+        val savingGoalAmount = income.savingGoals.firstOrNull { it.yearMonth == month }?.amount ?: 0L
+        val additionalIncomeAmount = income.incomes
+            .filter { YearMonth.from(it.incomeDate) == month }
+            .sumOf { it.amount }
+
+        val calendarMonthExpenses = preparedExpenses.filter { it.calendarMonth == month }
+        val plannedMonthExpenses = preparedExpenses.filter { it.planningMonth == month }
+
+        val subscriptions = subscriptionCalculator.calculatePayments(
+            month = month,
+            inputs = planned.subscriptions,
+            monthExpenses = calendarMonthExpenses.map { it.expense },
+            rates = rates
+        )
+        val loans = loanCalculator.calculatePayments(month, planned.loans.loans, planned.loans.payments)
+        val fixedExpenses = fixedExpenseCalculator.calculatePayments(month, planned.fixedExpenses)
+
+        val totalExpenses = plannedMonthExpenses.sumOf { it.netAmount }
+        val totalCardExpense = calendarMonthExpenses
+            .filter { it.expense.paymentSourceType == AccountType.CREDIT_CARD }
+            .sumOf { it.netAmount }
+        val creditCardPaymentAmount = plannedMonthExpenses
+            .filter { it.expense.paymentSourceType == AccountType.CREDIT_CARD }
+            .sumOf { it.netAmount }
+        val directExpenses = plannedMonthExpenses
+            .filter { it.expense.paymentSourceType != AccountType.CREDIT_CARD }
+            .sumOf { it.netAmount }
+
+        val totalSubscriptionsUnpaid = subscriptions.filter { !it.isPaid }.sumOf { it.amount }
+        val totalSubscriptionsPaid = plannedMonthExpenses
+            .filter { it.expense.subscriptionId != null }
+            .sumOf { it.netAmount }
+        val totalSubscriptionsPlanned = subscriptions.sumOf { it.amount }
+        val totalLoans = loans.sumOf { it.amount }
+        val paidFixedExpenseIds = plannedMonthExpenses.mapNotNull { it.expense.fixedExpenseId }.toSet()
+        val totalFixedExpenses = fixedExpenses
+            .filter { it.fixedExpenseId !in paidFixedExpenseIds }
+            .sumOf { it.amount }
+        val suggestedSaving = ((applicableSalary + additionalIncomeAmount - totalExpenses - totalSubscriptionsUnpaid - totalLoans - totalFixedExpenses) / 2)
+            .coerceAtLeast(0L)
+
+        val summary = MonthlyBudgetSummary(
+            yearMonth = month,
+            salaryAmount = applicableSalary,
+            additionalIncomeAmount = additionalIncomeAmount,
+            savingGoalAmount = savingGoalAmount,
+            totalExpenseAmount = totalExpenses,
+            calendarCreditCardSpendingAmount = totalCardExpense,
+            creditCardPaymentAmount = creditCardPaymentAmount,
+            directExpenseAmount = directExpenses,
+            subscriptionAmount = totalSubscriptionsUnpaid,
+            subscriptionPlannedAmount = totalSubscriptionsPlanned,
+            subscriptionPaidAmount = totalSubscriptionsPaid,
+            subscriptionUnpaidPlannedAmount = totalSubscriptionsUnpaid,
+            loanPaymentAmount = totalLoans,
+            fixedExpenseAmount = totalFixedExpenses,
+            suggestedSavingAmount = suggestedSaving,
+            categorySummaries = buildCategorySummaries(
+                plannedMonthExpenses = plannedMonthExpenses,
+                budgets = expense.budgets.filter { it.yearMonth == month }
+            )
+        )
+
+        return summary.copy(
+            warnings = BudgetWarningRules.build(
+                month = month,
+                today = today,
+                remainingAfterFixedPayments = summary.remainingAfterFixedPayments,
+                categorySummaries = summary.categorySummaries,
+                cardPayments = buildCardPaymentsDue(
+                    month = month,
+                    plannedMonthExpenses = plannedMonthExpenses,
+                    statementRules = expense.statementRules,
+                    statementPayments = expense.statementPayments
+                ),
+                loanPayments = loans
+            )
+        )
+    }
+
+    private companion object {
+        /**
+         * A credit-card expense can land at most this many months after its calendar month
+         * (statement close pushes +1, a due day on or before the statement day pushes +1 more).
+         * The expense window loaded for a month range starts this far before the first month;
+         * keep it in sync with [planningMonth].
+         */
+        const val MAX_PLANNING_MONTH_SHIFT = 2L
     }
 }
 
 private fun buildCategorySummaries(
-    plannedMonthExpenses: List<Expense>,
-    budgets: List<CategoryBudget>,
-    adjustmentsByExpenseId: Map<Long, List<ExpenseAdjustment>>
+    plannedMonthExpenses: List<PreparedExpense>,
+    budgets: List<CategoryBudget>
 ): List<CategorySummary> {
-    val expensesByCategory = plannedMonthExpenses.groupBy { it.categoryId }
+    val expensesByCategory = plannedMonthExpenses.groupBy { it.expense.categoryId }
     val budgetsByCategory = budgets.associateBy { it.categoryId }
     val categoryIds = (expensesByCategory.keys + budgetsByCategory.keys).toSortedSet()
 
     return categoryIds.map { categoryId ->
         val categoryExpenses = expensesByCategory[categoryId].orEmpty()
         val budget = budgetsByCategory[categoryId]
-        val category = budget?.category ?: categoryExpenses.firstOrNull()?.category
-        val spent = categoryExpenses.sumOf { it.netAmount(adjustmentsByExpenseId) }
+        val category = budget?.category ?: categoryExpenses.firstOrNull()?.expense?.category
+        val spent = categoryExpenses.sumOf { it.netAmount }
         val budgetLimit = budget?.limitAmount
 
         CategorySummary(
@@ -153,6 +227,36 @@ private fun buildCategorySummaries(
                 ?.let { spent.toFloat() / it }
         )
     }.sortedByDescending { it.amount }
+}
+
+/**
+ * One entry per credit card that has a statement falling due in [month]. The due day is resolved
+ * the same way [CreditCardStatementCalculator] does for the payment month.
+ */
+private fun buildCardPaymentsDue(
+    month: YearMonth,
+    plannedMonthExpenses: List<PreparedExpense>,
+    statementRules: List<CreditCardStatementRule>,
+    statementPayments: List<CreditCardStatementPayment>
+): List<CreditCardPaymentDue> {
+    return plannedMonthExpenses
+        .filter { it.expense.paymentSourceType == AccountType.CREDIT_CARD && it.expense.account != null }
+        .groupBy { it.expense.account!!.id }
+        .mapNotNull { (accountId, items) ->
+            val account = items.first().expense.account!!
+            val dueDay = statementRules.effectiveFor(accountId, month)?.dueDay
+                ?: account.dueDay
+                ?: return@mapNotNull null
+            CreditCardPaymentDue(
+                accountId = accountId,
+                accountName = account.name,
+                dueDate = month.atDay(dueDay.coerceIn(1, month.lengthOfMonth())),
+                amount = items.sumOf { it.netAmount },
+                isPaid = statementPayments.any {
+                    it.accountId == accountId && it.paymentMonth == month && it.isPaid
+                }
+            )
+        }
 }
 
 private fun Expense.netAmount(adjustmentsByExpenseId: Map<Long, List<ExpenseAdjustment>>): Long {
@@ -195,9 +299,17 @@ private fun List<CreditCardStatementRule>.effectiveFor(
         .maxByOrNull { it.effectiveFromMonth }
 }
 
+/** An expense with the derived values every month summary needs, computed once per emission. */
+private data class PreparedExpense(
+    val expense: Expense,
+    val netAmount: Long,
+    val calendarMonth: YearMonth,
+    val planningMonth: YearMonth
+)
+
 private data class MonthlyIncomeInputs(
     val salaryRules: List<SalaryRule>,
-    val savingGoal: MonthlySavingGoal?,
+    val savingGoals: List<MonthlySavingGoal>,
     val incomes: List<Income>
 )
 
@@ -205,15 +317,12 @@ private data class MonthlyExpenseInputs(
     val expenses: List<Expense>,
     val budgets: List<CategoryBudget>,
     val adjustments: List<ExpenseAdjustment>,
-    val statementRules: List<CreditCardStatementRule>
+    val statementRules: List<CreditCardStatementRule>,
+    val statementPayments: List<CreditCardStatementPayment>
 )
 
-private data class MonthlyBudgetInputs(
-    val salaryRules: List<SalaryRule>,
-    val savingGoal: MonthlySavingGoal?,
-    val incomes: List<Income>,
-    val expenses: List<Expense>,
-    val budgets: List<CategoryBudget>,
-    val adjustments: List<ExpenseAdjustment>,
-    val statementRules: List<CreditCardStatementRule>
+private data class PlannedPaymentInputs(
+    val subscriptions: SubscriptionInputs,
+    val loans: LoanInputs,
+    val fixedExpenses: List<FixedExpense>
 )

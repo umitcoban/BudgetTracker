@@ -7,6 +7,7 @@ import com.umit.budgettracker.core.domain.model.Expense
 import com.umit.budgettracker.core.domain.repository.ExpenseRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 import java.time.YearMonth
 import javax.inject.Inject
 
@@ -17,6 +18,12 @@ class ExpenseRepositoryImpl @Inject constructor(
         val startDate = yearMonth.atDay(1).toEpochDay()
         val endDate = yearMonth.atEndOfMonth().toEpochDay()
         return expenseDao.getExpensesForPeriod(startDate, endDate).map { entities ->
+            entities.map { it.expense.toDomain(it.category?.toDomain(), it.account?.toDomain()) }
+        }
+    }
+
+    override fun observeExpensesForDateRange(startDate: LocalDate, endDate: LocalDate): Flow<List<Expense>> {
+        return expenseDao.getExpensesForPeriod(startDate.toEpochDay(), endDate.toEpochDay()).map { entities ->
             entities.map { it.expense.toDomain(it.category?.toDomain(), it.account?.toDomain()) }
         }
     }

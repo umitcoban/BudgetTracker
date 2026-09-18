@@ -34,11 +34,10 @@ class DashboardViewModel @Inject constructor(
     val uiState: StateFlow<DashboardUiState> = _selectedMonth
         .flatMapLatest { month ->
             val monthlyIncomeContext = combine(
-                calculator.getSummaryForMonth(month),
-                calculator.getSummaryForMonth(month.minusMonths(1)),
+                calculator.getSummariesForMonths(listOf(month.minusMonths(1), month)),
                 salaryRepository.observeSalaryForMonth(month),
                 incomeRepository.observeIncomesForMonth(month)
-            ) { summary, previousSummary, salaryRule, additionalIncomes ->
+            ) { (previousSummary, summary), salaryRule, additionalIncomes ->
                 DashboardIncomeContext(
                     summary = summary,
                     previousSummary = previousSummary,

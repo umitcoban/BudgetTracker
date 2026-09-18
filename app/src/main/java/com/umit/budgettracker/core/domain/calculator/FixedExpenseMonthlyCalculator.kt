@@ -1,5 +1,6 @@
 package com.umit.budgettracker.core.domain.calculator
 
+import com.umit.budgettracker.core.domain.model.FixedExpense
 import com.umit.budgettracker.core.domain.model.FixedExpenseMonthlyPayment
 import com.umit.budgettracker.core.domain.repository.FixedExpenseRepository
 import kotlinx.coroutines.flow.Flow
@@ -12,23 +13,34 @@ class FixedExpenseMonthlyCalculator @Inject constructor(
 ) {
     fun getPaymentsForMonth(month: YearMonth): Flow<List<FixedExpenseMonthlyPayment>> {
         return repository.observeActiveFixedExpenses().map { fixedExpenses ->
-            fixedExpenses
-                .filter { expense ->
-                    !month.isBefore(expense.startMonth) &&
-                        (expense.endMonth == null || !month.isAfter(expense.endMonth))
-                }
-                .map { expense ->
-                    FixedExpenseMonthlyPayment(
-                        fixedExpenseId = expense.id,
-                        title = expense.title,
-                        amount = expense.amount,
-                        dayOfMonth = expense.dayOfMonth,
-                        categoryId = expense.categoryId,
-                        paymentAccountId = expense.paymentAccountId,
-                        category = expense.category,
-                        account = expense.account
-                    )
-                }
+            calculatePayments(month, fixedExpenses)
         }
+    }
+
+    fun observeInputs(): Flow<List<FixedExpense>> = repository.observeActiveFixedExpenses()
+
+    /** Pure per-month projection over already-loaded active fixed expenses. */
+    fun calculatePayments(
+        month: YearMonth,
+        fixedExpenses: List<FixedExpense>
+    ): List<FixedExpenseMonthlyPayment> {
+        return fixedExpenses
+            .filter { expense ->
+                expense.isActive &&
+                    !month.isBefore(expense.startMonth) &&
+                    (expense.endMonth == null || !month.isAfter(expense.endMonth))
+            }
+            .map { expense ->
+                FixedExpenseMonthlyPayment(
+                    fixedExpenseId = expense.id,
+                    title = expense.title,
+                    amount = expense.amount,
+                    dayOfMonth = expense.dayOfMonth,
+                    categoryId = expense.categoryId,
+                    paymentAccountId = expense.paymentAccountId,
+                    category = expense.category,
+                    account = expense.account
+                )
+            }
     }
 }
