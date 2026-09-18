@@ -13,6 +13,7 @@ data class SalaryRuleEntity(
     val amount: Long, // in minor units (kuruş)
     val effectiveStartMonth: String, // "YYYY-MM"
     val note: String? = null,
+    val payDay: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

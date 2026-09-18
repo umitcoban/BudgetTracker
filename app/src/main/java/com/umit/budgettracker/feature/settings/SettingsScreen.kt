@@ -25,7 +25,7 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    var pendingFullBackupImportUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var pendingRestore by remember { mutableStateOf<PendingRestore?>(null) }
     val isLoading = uiState is SettingsUiState.Loading
 
     // Launchers
@@ -33,7 +33,13 @@ fun SettingsScreen(
         uri?.let { viewModel.exportJson(it) }
     }
     val openJsonLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { viewModel.importJson(it) }
+        uri?.let {
+            pendingRestore = PendingRestore(
+                title = "JSON İçe Aktar",
+                message = "İçe aktarma mevcut tüm verileri dosyadakilerle değiştirecek. Bu işlem geri alınamaz. Devam etmek istiyor musun?",
+                action = { viewModel.importJson(it) }
+            )
+        }
     }
     val createCsvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         uri?.let { viewModel.exportCsv(it) }
@@ -45,13 +51,25 @@ fun SettingsScreen(
         uri?.let { viewModel.backupDatabase(it) }
     }
     val openDbLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { viewModel.restoreDatabase(it) }
+        uri?.let {
+            pendingRestore = PendingRestore(
+                title = "Veritabanını Geri Yükle",
+                message = "Geri yükleme mevcut veritabanının tamamını yedek dosyasıyla değiştirecek. Bu işlem geri alınamaz. Devam etmek istiyor musun?",
+                action = { viewModel.restoreDatabase(it) }
+            )
+        }
     }
     val createFullBackupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri?.let { viewModel.exportFullBackup(it) }
     }
     val openFullBackupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        pendingFullBackupImportUri = uri
+        uri?.let {
+            pendingRestore = PendingRestore(
+                title = "Tam Yedek Yükle",
+                message = "Tam yedek yükleme mevcut tüm verileri ve ekli fotoğrafları değiştirecek. Bu işlem geri alınamaz. Devam etmek istiyor musun?",
+                action = { viewModel.importFullBackup(it) }
+            )
+        }
     }
 
     LaunchedEffect(uiState) {
@@ -179,24 +197,31 @@ fun SettingsScreen(
             }
         }
 
-        pendingFullBackupImportUri?.let { uri ->
+        pendingRestore?.let { pending ->
             AlertDialog(
-                onDismissRequest = { pendingFullBackupImportUri = null },
-                title = { Text("Tam Yedek Yükle") },
-                text = { Text("Tam yedek yükleme mevcut tüm verileri ve ekli fotoğrafları değiştirecek. Bu işlem geri alınamaz. Devam etmek istiyor musun?") },
+                onDismissRequest = { pendingRestore = null },
+                title = { Text(pending.title) },
+                text = { Text(pending.message) },
                 confirmButton = {
                     TextButton(onClick = {
-                        viewModel.importFullBackup(uri)
-                        pendingFullBackupImportUri = null
+                        pending.action()
+                        pendingRestore = null
                     }) { Text("Devam Et") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { pendingFullBackupImportUri = null }) { Text("Vazgeç") }
+                    TextButton(onClick = { pendingRestore = null }) { Text("Vazgeç") }
                 }
             )
         }
     }
 }
+
+/** A destructive restore waiting for the user's explicit confirmation. */
+private data class PendingRestore(
+    val title: String,
+    val message: String,
+    val action: () -> Unit
+)
 
 @Composable
 fun SettingsSectionTitle(title: String) {

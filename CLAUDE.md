@@ -21,7 +21,7 @@ Single-module Android app (`:app`). No lint/ktlint/detekt is configured.
 ./gradlew clean test assembleRelease     # release sanity check (R8 + resource shrinking enabled)
 ```
 
-Test results land in `app/build/test-results/testDebugUnitTest/*.xml`. Instrumented tests (`androidTest`) are only the template example; all real coverage is JVM unit tests under `app/src/test`.
+Test results land in `app/build/test-results/testDebugUnitTest/*.xml`. The one instrumented suite is `MigrationTest` (Room `MigrationTestHelper` over `app/schemas/`), run with `./gradlew :app:connectedDebugAndroidTest` on an emulator — it uninstalls the app afterwards, wiping that device's app data.
 
 ## Architecture
 
@@ -48,8 +48,8 @@ feature/*/XxxScreen.kt          Compose, presentation only, collects StateFlow
 
 ### Persistence
 
-- `core/database/AppDatabase.kt` declares entities and the Room version (currently 15, `exportSchema = true`, schemas committed under `app/schemas/`).
-- All migrations are inline objects in `core/di/DatabaseModule.kt` and registered in `addMigrations(...)`. There is no destructive fallback. Use the existing `addNullableColumnIfMissing(db, table, column, type)` helper for new nullable columns.
+- `core/database/AppDatabase.kt` declares entities and the Room version (currently 16, `exportSchema = true`, schemas committed under `app/schemas/`).
+- All migrations are inline objects in `core/di/DatabaseModule.kt`, collected in `DatabaseModule.migrations` (used by both the builder and `MigrationTest`). There is no destructive fallback. Use the existing `addNullableColumnIfMissing(db, table, column, type)` helper for new nullable columns, and add a seed-then-validate case to `MigrationTest` for every new version.
 - Default categories and payment accounts are seeded in the `RoomDatabase.Callback.onCreate` inside `DatabaseModule`.
 - Type converters (`core/database/converter/Converters.kt`): `LocalDate` ↔ epoch-day `Long`, `YearMonth` ↔ `"yyyy-MM"` text. Month-keyed queries compare on that text form.
 - Preferences (theme, reminders, etc.) go through `core/datastore/SettingsDataStore.kt`.

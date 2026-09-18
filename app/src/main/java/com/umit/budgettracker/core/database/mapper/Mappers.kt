@@ -67,14 +67,16 @@ fun SalaryRuleEntity.toDomain() = SalaryRule(
     id = id,
     amount = amount,
     effectiveStartMonth = YearMonth.parse(effectiveStartMonth),
-    note = note
+    note = note,
+    payDay = payDay
 )
 
 fun SalaryRule.toEntity() = SalaryRuleEntity(
     id = id,
     amount = amount,
     effectiveStartMonth = effectiveStartMonth.toString(),
-    note = note
+    note = note,
+    payDay = payDay
 )
 
 fun MonthlySavingGoalEntity.toDomain() = MonthlySavingGoal(

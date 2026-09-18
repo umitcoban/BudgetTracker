@@ -32,15 +32,16 @@ class JsonExportService @Inject constructor(
     private val statementPaymentRepository: CreditCardStatementPaymentRepository,
     private val adjustmentRepository: ExpenseAdjustmentRepository
 ) {
-    private val json = Json { prettyPrint = true }
+    // encodeDefaults keeps appName and empty sections in the file so a backup is self-describing.
+    private val json = Json { prettyPrint = true; encodeDefaults = true }
 
     suspend fun exportToJson(uri: Uri): ExportResult {
         return try {
             val dto = BudgetTrackerExportDto(
-                schemaVersion = 13,
+                schemaVersion = 14,
                 exportedAt = Instant.now().toString(),
                 salaryRules = salaryRepository.observeAllSalaryRules().first().map { 
-                    SalaryRuleDto(it.id, it.amount, it.effectiveStartMonth.toString(), it.note) 
+                    SalaryRuleDto(it.id, it.amount, it.effectiveStartMonth.toString(), it.note, it.payDay)
                 },
                 incomes = incomeRepository.observeAllIncomes().first().map {
                     IncomeDto(it.id, it.title, it.amount, it.incomeDate.toEpochDay(), it.type.name, it.note)

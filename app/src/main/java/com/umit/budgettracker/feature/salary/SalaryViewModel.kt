@@ -21,14 +21,21 @@ class SalaryViewModel @Inject constructor(
     val salaryRules: StateFlow<List<SalaryRule>> = repository.observeAllSalaryRules()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun saveSalaryRule(existingRule: SalaryRule?, amount: Long, effectiveMonth: YearMonth, note: String?) {
+    fun saveSalaryRule(
+        existingRule: SalaryRule?,
+        amount: Long,
+        effectiveMonth: YearMonth,
+        note: String?,
+        payDay: Int?
+    ) {
         viewModelScope.launch {
             repository.upsertSalaryRule(
                 SalaryRule(
                     id = SalaryRules.idForSave(existingRule, effectiveMonth),
                     amount = amount,
                     effectiveStartMonth = effectiveMonth,
-                    note = note
+                    note = note,
+                    payDay = payDay
                 )
             )
         }

@@ -88,16 +88,16 @@ class CashFlowViewModel @Inject constructor(
             ) { actual, planned ->
                 val list = mutableListOf<CashFlowEvent>()
 
-                // Salary rules carry no pay day, so the month's salary is placed on day 1.
                 planned.salaryRule?.takeIf { it.amount > 0L }?.let { salary ->
+                    val payDay = salary.payDay
                     list.add(
                         CashFlowEvent(
-                            date = month.atDay(1),
+                            date = month.atDay((payDay ?: 1).coerceIn(1, month.lengthOfMonth())),
                             title = "Maaş",
                             amount = salary.amount,
                             type = CashFlowEventType.INCOME,
                             sourceId = salary.id,
-                            description = "Aylık maaş · ay başı varsayıldı"
+                            description = if (payDay == null) "Aylık maaş · gün girilmedi, ay başı varsayıldı" else "Aylık maaş"
                         )
                     )
                 }

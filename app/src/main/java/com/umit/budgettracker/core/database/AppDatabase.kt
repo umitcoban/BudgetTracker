@@ -30,7 +30,7 @@ import com.umit.budgettracker.core.database.entity.*
         LoanPaymentEntity::class,
         CreditCardStatementRuleEntity::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
