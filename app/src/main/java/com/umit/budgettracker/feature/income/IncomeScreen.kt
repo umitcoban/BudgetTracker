@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.umit.budgettracker.core.domain.model.Income
 import com.umit.budgettracker.core.domain.model.IncomeType
+import com.umit.budgettracker.core.util.DateUtils
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.core.ui.components.FinanceCard
 import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
@@ -154,7 +155,7 @@ fun IncomeScreen(
                     groupedIncomes.forEach { (date, dayIncomes) ->
                         item {
                             Text(
-                                date.format(DateTimeFormatter.ofPattern("d MMMM")),
+                                DateUtils.formatDayMonth(date),
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(top = 4.dp)

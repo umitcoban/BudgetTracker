@@ -1,6 +1,7 @@
 package com.umit.budgettracker.core.domain.calculator
 
 import com.umit.budgettracker.core.domain.model.AccountType
+import com.umit.budgettracker.core.domain.model.CreditCardStatementRule
 import com.umit.budgettracker.core.domain.model.Expense
 import com.umit.budgettracker.core.domain.model.ExpenseAdjustment
 import com.umit.budgettracker.core.domain.model.ExpenseAdjustmentType
@@ -34,6 +35,31 @@ class CreditCardStatementCalculatorTest {
         assertEquals(LocalDate.of(2026, 6, 5), summary.dueDate)
         assertEquals(LocalDate.of(2026, 5, 25), summary.statementEndDate)
         assertEquals(LocalDate.of(2026, 4, 26), summary.statementStartDate)
+    }
+
+    @Test
+    fun statementPeriods_stayContiguousWhenStatementDayChangesBetweenMonths() {
+        val account = PaymentAccount(1, "Bonus", AccountType.CREDIT_CARD, 11, 20, true)
+        val rules = listOf(
+            CreditCardStatementRule(1, account.id, YearMonth.of(2026, 10), statementDay = 12, dueDay = 20),
+            CreditCardStatementRule(2, account.id, YearMonth.of(2026, 11), statementDay = 11, dueDay = 20)
+        )
+        val onOldStatementDay = expense(1L, 1_000L, LocalDate.of(2026, 9, 11), account)
+        val dayAfterOldStatement = expense(2L, 2_000L, LocalDate.of(2026, 9, 12), account)
+        val onNewStatementDay = expense(3L, 4_000L, LocalDate.of(2026, 10, 12), account)
+        val dayAfterNewStatement = expense(4L, 8_000L, LocalDate.of(2026, 10, 13), account)
+        val all = listOf(onOldStatementDay, dayAfterOldStatement, onNewStatementDay, dayAfterNewStatement)
+
+        val september = calculator.calculateStatement(account, YearMonth.of(2026, 9), all, rules)
+        val october = calculator.calculateStatement(account, YearMonth.of(2026, 10), all, rules)
+        val november = calculator.calculateStatement(account, YearMonth.of(2026, 11), all, rules)
+
+        assertEquals(LocalDate.of(2026, 9, 11), september.statementEndDate)
+        assertEquals(LocalDate.of(2026, 9, 12)..LocalDate.of(2026, 10, 12), october.statementStartDate..october.statementEndDate)
+        assertEquals(LocalDate.of(2026, 10, 13)..LocalDate.of(2026, 11, 11), november.statementStartDate..november.statementEndDate)
+        assertEquals(listOf(1L), september.expenses.map { it.id })
+        assertEquals(listOf(2L, 3L), october.expenses.map { it.id })
+        assertEquals(listOf(4L), november.expenses.map { it.id })
     }
 
     @Test

@@ -38,7 +38,13 @@ class CreditCardStatementCalculator @Inject constructor() {
         
         val statementRule = ruleForMonth(account, statementEndMonth, rules)
         val statementEndDate = statementEndMonth.atDay(clampDay(statementRule.statementDay, statementEndMonth))
-        val statementStartDate = statementEndDate.minusMonths(1).plusDays(1)
+        // The period starts the day after the PREVIOUS statement closed, using that month's own
+        // rule — so a statement day that moves (11 -> 12) leaves no gap and no overlap.
+        val previousEndMonth = statementEndMonth.minusMonths(1)
+        val previousRule = ruleForMonth(account, previousEndMonth, rules)
+        val statementStartDate = previousEndMonth
+            .atDay(clampDay(previousRule.statementDay, previousEndMonth))
+            .plusDays(1)
 
         val includedExpenses = allExpenses.filter {
             it.paymentAccountId == account.id &&

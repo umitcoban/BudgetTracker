@@ -50,6 +50,7 @@ import com.umit.budgettracker.core.domain.model.CashFlowEventType
 import com.umit.budgettracker.core.ui.components.FinanceCard
 import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
 import com.umit.budgettracker.core.ui.components.MetricTile
+import com.umit.budgettracker.core.util.DateUtils
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
 import java.time.LocalDate
@@ -214,7 +215,6 @@ private fun CashFlowSummary(income: Long, outflow: Long, netFlow: Long) {
 
 @Composable
 private fun DateHeader(date: LocalDate) {
-    val formatter = DateTimeFormatter.ofPattern("d MMMM, EEEE")
     val relativeLabel = when (date) {
         LocalDate.now() -> "BUGÜN"
         LocalDate.now().plusDays(1) -> "YARIN"
@@ -226,7 +226,7 @@ private fun DateHeader(date: LocalDate) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            date.format(formatter),
+            DateUtils.formatDayMonthWeekday(date),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

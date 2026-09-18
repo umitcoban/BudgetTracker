@@ -30,6 +30,7 @@ import com.umit.budgettracker.core.ui.IconMapper
 import com.umit.budgettracker.core.ui.components.FinanceCard
 import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
 import com.umit.budgettracker.core.util.InstallmentUtils
+import com.umit.budgettracker.core.util.DateUtils
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
 import kotlinx.coroutines.Dispatchers
@@ -124,7 +125,7 @@ fun ExpenseScreen(
                 groupedExpenses.forEach { (date, dayExpenses) ->
                     item {
                         Text(
-                            date.format(DateTimeFormatter.ofPattern("d MMMM")),
+                            DateUtils.formatDayMonth(date),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
