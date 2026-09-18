@@ -41,7 +41,9 @@ class ReportsViewModel @Inject constructor(
                             month = summary.yearMonth,
                             incomeAmount = summary.totalIncomeAmount,
                             expenseAmount = summary.totalExpenseAmount,
-                            remainingAmount = summary.remainingAfterSavingAndFixedPayments
+                            remainingAmount = summary.remainingAfterSavingAndFixedPayments,
+                            directExpenseAmount = summary.directExpenseAmount,
+                            creditCardPaymentAmount = summary.creditCardPaymentAmount
                         )
                     }
                 )
@@ -62,7 +64,9 @@ data class MonthlyTrendPoint(
     val month: YearMonth,
     val incomeAmount: Long,
     val expenseAmount: Long,
-    val remainingAmount: Long
+    val remainingAmount: Long,
+    val directExpenseAmount: Long,
+    val creditCardPaymentAmount: Long
 )
 
 sealed interface ReportsUiState {

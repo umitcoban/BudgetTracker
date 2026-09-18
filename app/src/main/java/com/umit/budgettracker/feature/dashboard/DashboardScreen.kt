@@ -146,7 +146,7 @@ fun DashboardScreen(
                     }
 
                     item {
-                        KeyMetrics(summary)
+                        KeyMetrics(summary, state.history)
                     }
 
                     item {
@@ -458,32 +458,40 @@ private fun HeroMetric(label: String, value: String) {
 }
 
 @Composable
-private fun KeyMetrics(summary: MonthlyBudgetSummary) {
-    val income = summary.totalIncomeAmount
-    val savingRate = if (income > 0L) summary.savingGoalAmount * 100 / income else 0L
-    val expenseRate = if (income > 0L) summary.totalExpenseAmount * 100 / income else 0L
-    val fixedRate = if (income > 0L) summary.projectedFixedPaymentsAmount * 100 / income else 0L
+private fun KeyMetrics(summary: MonthlyBudgetSummary, history: List<MonthlyBudgetSummary>) {
+    val savingRate = summary.rateOfIncome { it.savingGoalAmount }
+    val expenseRate = summary.rateOfIncome { it.totalExpenseAmount }
+    val fixedRate = summary.rateOfIncome { it.projectedFixedPaymentsAmount }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         MetricTile(
             label = "Birikim",
             value = "%$savingRate",
             modifier = Modifier.weight(1f),
-            supportingText = "gelir oranı"
+            supportingText = "gelir oranı",
+            sparkline = history.map { it.rateOfIncome { s -> s.savingGoalAmount } }
         )
         MetricTile(
             label = "Harcama",
             value = "%$expenseRate",
             modifier = Modifier.weight(1f),
             supportingText = "gelir oranı",
-            valueColor = if (expenseRate > 80) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+            valueColor = if (expenseRate > 80) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            sparkline = history.map { it.rateOfIncome { s -> s.totalExpenseAmount } }
         )
         MetricTile(
             label = "Sabit yük",
             value = "%$fixedRate",
             modifier = Modifier.weight(1f),
-            supportingText = "gelir oranı"
+            supportingText = "gelir oranı",
+            sparkline = history.map { it.rateOfIncome { s -> s.projectedFixedPaymentsAmount } }
         )
     }
+}
+
+/** Whole-percent share of total income, 0 when there is no income. */
+private inline fun MonthlyBudgetSummary.rateOfIncome(amount: (MonthlyBudgetSummary) -> Long): Long {
+    val income = totalIncomeAmount
+    return if (income > 0L) amount(this) * 100L / income else 0L
 }
 
 @Composable

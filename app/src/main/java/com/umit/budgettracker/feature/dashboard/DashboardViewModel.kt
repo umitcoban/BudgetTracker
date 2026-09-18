@@ -33,14 +33,16 @@ class DashboardViewModel @Inject constructor(
 
     val uiState: StateFlow<DashboardUiState> = _selectedMonth
         .flatMapLatest { month ->
+            val historyMonths = (HISTORY_MONTH_COUNT - 1 downTo 0).map { month.minusMonths(it.toLong()) }
             val monthlyIncomeContext = combine(
-                calculator.getSummariesForMonths(listOf(month.minusMonths(1), month)),
+                calculator.getSummariesForMonths(historyMonths),
                 salaryRepository.observeSalaryForMonth(month),
                 incomeRepository.observeIncomesForMonth(month)
-            ) { (previousSummary, summary), salaryRule, additionalIncomes ->
+            ) { history, salaryRule, additionalIncomes ->
                 DashboardIncomeContext(
-                    summary = summary,
-                    previousSummary = previousSummary,
+                    summary = history.last(),
+                    previousSummary = history[history.size - 2],
+                    history = history,
                     salaryRule = salaryRule,
                     additionalIncomeCount = additionalIncomes.size
                 )
@@ -52,6 +54,7 @@ class DashboardViewModel @Inject constructor(
                 DashboardUiState.Success(
                     summary = incomeContext.summary,
                     previousSummary = incomeContext.previousSummary,
+                    history = incomeContext.history,
                     effectiveSalaryRule = incomeContext.salaryRule,
                     additionalIncomeCount = incomeContext.additionalIncomeCount,
                     openDebts = debts
@@ -92,6 +95,11 @@ class DashboardViewModel @Inject constructor(
         if (amount <= 0L) return
         updateSavingGoal(amount)
     }
+
+    private companion object {
+        /** Selected month plus the five before it, for the KPI sparklines. */
+        const val HISTORY_MONTH_COUNT = 6
+    }
 }
 
 sealed interface DashboardUiState {
@@ -99,6 +107,8 @@ sealed interface DashboardUiState {
     data class Success(
         val summary: MonthlyBudgetSummary,
         val previousSummary: MonthlyBudgetSummary,
+        /** Oldest first, ending with [summary]. */
+        val history: List<MonthlyBudgetSummary>,
         val effectiveSalaryRule: SalaryRule?,
         val additionalIncomeCount: Int,
         val openDebts: List<DebtRecord>
@@ -109,6 +119,7 @@ sealed interface DashboardUiState {
 private data class DashboardIncomeContext(
     val summary: MonthlyBudgetSummary,
     val previousSummary: MonthlyBudgetSummary,
+    val history: List<MonthlyBudgetSummary>,
     val salaryRule: SalaryRule?,
     val additionalIncomeCount: Int
 )
