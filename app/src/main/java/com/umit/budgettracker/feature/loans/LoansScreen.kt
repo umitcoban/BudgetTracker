@@ -17,6 +17,9 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -45,7 +48,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.umit.budgettracker.core.domain.calculator.LoanPaymentCalculator
+import com.umit.budgettracker.core.domain.model.AccountType
+import com.umit.budgettracker.core.domain.model.Category
 import com.umit.budgettracker.core.domain.model.Loan
+import com.umit.budgettracker.core.domain.model.PaymentAccount
+import com.umit.budgettracker.core.ui.IconMapper
 import com.umit.budgettracker.core.domain.model.LoanPayment
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
@@ -63,6 +70,8 @@ fun LoansScreen(
     val selectedMonth by viewModel.selectedMonth.collectAsState()
     val paidLoanIds by viewModel.paidLoanIds.collectAsState()
     val paymentsByLoanId by viewModel.paymentsByLoanId.collectAsState()
+    val categories by viewModel.categories.collectAsState()
+    val accounts by viewModel.accounts.collectAsState()
     val message by viewModel.message.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var editingLoan by remember { mutableStateOf<Loan?>(null) }
@@ -79,21 +88,24 @@ fun LoansScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Krediler") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
+            Column {
+                TopAppBar(
+                    title = { Text("Krediler") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
+                        }
                     }
-                },
-                actions = {
-                    MonthSelector(
-                        selectedMonth = selectedMonth,
-                        onMonthChange = viewModel::previousMonth,
-                        onNextMonth = viewModel::nextMonth
-                    )
-                }
-            )
+                )
+                MonthSelector(
+                    selectedMonth = selectedMonth,
+                    onMonthChange = viewModel::previousMonth,
+                    onNextMonth = viewModel::nextMonth,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
@@ -142,6 +154,8 @@ fun LoansScreen(
     if (showLoanDialog) {
         LoanDialog(
             existingLoan = editingLoan,
+            categories = categories,
+            accounts = accounts,
             onDismiss = { showLoanDialog = false },
             onConfirm = {
                 viewModel.saveLoan(it)
@@ -301,13 +315,34 @@ private fun LoanRow(
     }
 }
 
+private const val DEFAULT_LOAN_CATEGORY_NAME = "Kredi"
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LoanDialog(
     existingLoan: Loan?,
+    categories: List<Category>,
+    accounts: List<PaymentAccount>,
     onDismiss: () -> Unit,
     onConfirm: (Loan) -> Unit
 ) {
     var title by remember(existingLoan) { mutableStateOf(existingLoan?.title.orEmpty()) }
+    var selectedCategory by remember(existingLoan, categories) {
+        mutableStateOf(
+            categories.firstOrNull { it.id == existingLoan?.categoryId }
+                ?: categories.firstOrNull { it.name == DEFAULT_LOAN_CATEGORY_NAME }
+                ?: categories.firstOrNull()
+        )
+    }
+    var selectedAccount by remember(existingLoan, accounts) {
+        mutableStateOf(
+            accounts.firstOrNull { it.id == existingLoan?.paymentAccountId }
+                ?: accounts.firstOrNull { it.type == AccountType.BANK_ACCOUNT }
+                ?: accounts.firstOrNull()
+        )
+    }
+    var categoryExpanded by remember { mutableStateOf(false) }
+    var accountExpanded by remember { mutableStateOf(false) }
     var principalText by remember(existingLoan) { mutableStateOf(existingLoan?.principalAmount?.toAmountInput().orEmpty()) }
     var countText by remember(existingLoan) { mutableStateOf(existingLoan?.installmentCount?.toString() ?: "12") }
     var startMonthText by remember(existingLoan) { mutableStateOf(existingLoan?.startMonth?.toString() ?: YearMonth.now().toString()) }
@@ -323,7 +358,9 @@ private fun LoanDialog(
         monthlyPayment != null &&
         (count ?: 0) > 0 &&
         (day ?: 0) in 1..31 &&
-        startMonth != null
+        startMonth != null &&
+        selectedCategory != null &&
+        selectedAccount != null
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -367,6 +404,69 @@ private fun LoanDialog(
                     label = { Text("Ödeme Günü (1-31)") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                ExposedDropdownMenuBox(
+                    expanded = categoryExpanded,
+                    onExpandedChange = { categoryExpanded = !categoryExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedCategory?.name ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Kategori") },
+                        leadingIcon = {
+                            selectedCategory?.let { Icon(IconMapper.getIcon(it.iconName), contentDescription = null) }
+                        },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = categoryExpanded,
+                        onDismissRequest = { categoryExpanded = false }
+                    ) {
+                        categories.forEach { category ->
+                            DropdownMenuItem(
+                                text = { Text(category.name) },
+                                leadingIcon = { Icon(IconMapper.getIcon(category.iconName), contentDescription = null) },
+                                onClick = {
+                                    selectedCategory = category
+                                    categoryExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                ExposedDropdownMenuBox(
+                    expanded = accountExpanded,
+                    onExpandedChange = { accountExpanded = !accountExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedAccount?.name ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Ödeme Hesabı") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = accountExpanded,
+                        onDismissRequest = { accountExpanded = false }
+                    ) {
+                        accounts.forEach { account ->
+                            DropdownMenuItem(
+                                text = { Text(account.name) },
+                                onClick = {
+                                    selectedAccount = account
+                                    accountExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                Text(
+                    "Taksit \"ödendi\" işaretlendiğinde bu kategori ve hesapla bir harcama kaydı oluşur.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 if (existingLoan != null) {
                     Text(
                         "Geçmişte kaydedilmiş harcamalar değişmeden korunur.",
@@ -389,13 +489,13 @@ private fun LoanDialog(
                             installmentCount = count!!,
                             startMonth = startMonth!!,
                             paymentDay = day!!,
-                            categoryId = existingLoan?.categoryId,
-                            paymentAccountId = existingLoan?.paymentAccountId,
+                            categoryId = selectedCategory?.id,
+                            paymentAccountId = selectedAccount?.id,
                             note = existingLoan?.note,
                             isActive = existingLoan?.isActive ?: true,
                             closedAt = existingLoan?.closedAt,
-                            category = existingLoan?.category,
-                            account = existingLoan?.account
+                            category = selectedCategory,
+                            account = selectedAccount
                         )
                     )
                 }

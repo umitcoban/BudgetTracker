@@ -3,9 +3,13 @@ package com.umit.budgettracker.feature.loans
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.umit.budgettracker.core.domain.calculator.LoanPaymentCalculator
+import com.umit.budgettracker.core.domain.model.Category
 import com.umit.budgettracker.core.domain.model.Loan
+import com.umit.budgettracker.core.domain.model.PaymentAccount
 import com.umit.budgettracker.core.domain.model.LoanPayment
+import com.umit.budgettracker.core.domain.repository.CategoryRepository
 import com.umit.budgettracker.core.domain.repository.LoanPaymentRepository
+import com.umit.budgettracker.core.domain.repository.PaymentAccountRepository
 import com.umit.budgettracker.core.domain.repository.LoanDeletionResult
 import com.umit.budgettracker.core.domain.repository.LoanRepository
 import com.umit.budgettracker.core.domain.usecase.MarkLoanPaymentAsPaidUseCase
@@ -23,7 +27,9 @@ import javax.inject.Inject
 class LoansViewModel @Inject constructor(
     private val repository: LoanRepository,
     loanPaymentRepository: LoanPaymentRepository,
-    private val markLoanPaymentAsPaid: MarkLoanPaymentAsPaidUseCase
+    private val markLoanPaymentAsPaid: MarkLoanPaymentAsPaidUseCase,
+    private val categoryRepository: CategoryRepository,
+    private val accountRepository: PaymentAccountRepository
 ) : ViewModel() {
 
     private val _selectedMonth = MutableStateFlow(YearMonth.now())
@@ -41,6 +47,12 @@ class LoansViewModel @Inject constructor(
         .observeAllPayments()
         .map { payments -> payments.groupBy { it.loanId } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    val categories: StateFlow<List<Category>> = categoryRepository.observeActiveCategories()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val accounts: StateFlow<List<PaymentAccount>> = accountRepository.observeActiveAccounts()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
@@ -81,6 +93,7 @@ class LoansViewModel @Inject constructor(
                 MarkLoanPaymentResult.MarkedPaid -> "Kredi ödemesi ödendi olarak işaretlendi."
                 MarkLoanPaymentResult.AlreadyPaid -> "Bu kredi ödemesi zaten işaretlenmiş."
                 MarkLoanPaymentResult.NotDue -> "Bu kredi seçili ay için ödeme beklemiyor."
+                MarkLoanPaymentResult.MissingRequiredSelection -> "Ödeme kaydı için önce bir kategori ve ödeme hesabı tanımlayın."
             }
         }
     }

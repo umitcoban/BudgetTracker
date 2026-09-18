@@ -103,12 +103,17 @@ fun MetricTile(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            if (sparkline != null && sparkline.size >= 2 && sparkline.any { it != 0L }) {
+            if (sparkline != null && sparkline.size >= 2) {
                 Spacer(Modifier.height(8.dp))
-                Sparkline(
-                    values = sparkline,
-                    modifier = Modifier.fillMaxWidth().height(22.dp)
-                )
+                // Reserve the row even when every point is zero so sibling tiles stay level.
+                if (sparkline.any { it != 0L }) {
+                    Sparkline(
+                        values = sparkline,
+                        modifier = Modifier.fillMaxWidth().height(22.dp)
+                    )
+                } else {
+                    Spacer(Modifier.height(22.dp))
+                }
             }
         }
     }

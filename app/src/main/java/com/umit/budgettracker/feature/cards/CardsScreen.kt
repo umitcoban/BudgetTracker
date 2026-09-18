@@ -38,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -61,6 +62,7 @@ import com.umit.budgettracker.core.ui.components.FinanceCard
 import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
 import com.umit.budgettracker.core.ui.components.MetricTile
 import com.umit.budgettracker.core.ui.components.StatusPill
+import com.umit.budgettracker.core.util.DateUtils
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
 import java.time.LocalDate
@@ -77,6 +79,7 @@ fun CardsScreen(
 ) {
     val accounts by viewModel.accounts.collectAsState()
     val statements by viewModel.statementUiState.collectAsState()
+    val statementRules by viewModel.statementRules.collectAsState()
     val selectedMonth by viewModel.selectedMonth.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
     var accountToEditDates by remember { mutableStateOf<PaymentAccount?>(null) }
@@ -138,7 +141,7 @@ fun CardsScreen(
                     MetricTile(
                         label = "Ödenecek",
                         value = MoneyFormatter.format(unpaidStatement),
-                        supportingText = "${statements.count { !it.isPaid }} bekleyen",
+                        supportingText = "${statements.count { it.isPending }} bekleyen",
                         modifier = Modifier.weight(1f),
                         valueColor = if (unpaidStatement > 0L) {
                             MaterialTheme.colorScheme.error
@@ -200,12 +203,18 @@ fun CardsScreen(
         }
 
         accountToEditDates?.let { account ->
+            val effectiveRule = statementRules
+                .filter { it.accountId == account.id && !it.effectiveFromMonth.isAfter(selectedMonth) }
+                .maxByOrNull { it.effectiveFromMonth }
             StatementDatesDialog(
                 account = account,
                 selectedMonth = selectedMonth,
+                currentStatementDay = effectiveRule?.statementDay ?: account.statementDay,
+                currentDueDay = effectiveRule?.dueDay ?: account.dueDay,
+                currentRuleSince = effectiveRule?.effectiveFromMonth,
                 onDismiss = { accountToEditDates = null },
-                onConfirm = { month, statementDay, dueDay ->
-                    viewModel.saveStatementRule(account.id, month, statementDay, dueDay)
+                onConfirm = { month, statementDay, dueDay, onlyThisMonth ->
+                    viewModel.saveStatementRule(account.id, month, statementDay, dueDay, onlyThisMonth)
                     accountToEditDates = null
                 }
             )
@@ -260,19 +269,23 @@ fun AccountRow(
                     )
                 }
                 if (account.type == AccountType.CREDIT_CARD && statement != null) {
-                    StatusPill(
-                        text = if (statement.isPaid) "ÖDENDİ" else "BEKLİYOR",
-                        containerColor = if (statement.isPaid) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.errorContainer
-                        },
-                        contentColor = if (statement.isPaid) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.error
-                        }
-                    )
+                    when {
+                        statement.isPaid -> StatusPill(
+                            text = "ÖDENDİ",
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.primary
+                        )
+                        statement.isPending -> StatusPill(
+                            text = "BEKLİYOR",
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                        else -> StatusPill(
+                            text = "EKSTRE YOK",
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 if (account.type == AccountType.CREDIT_CARD) {
                     Box {
@@ -315,7 +328,6 @@ private fun CreditCardStatementBlock(
     onMarkPaid: (Long) -> Unit,
     onMarkUnpaid: () -> Unit
 ) {
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("dd MMM") }
     var showExpenses by remember(statement.accountId, selectedMonth) { mutableStateOf(false) }
     val remainingDays = ChronoUnit.DAYS.between(LocalDate.now(), statement.summary.dueDate)
     val dueLabel = when {
@@ -347,7 +359,7 @@ private fun CreditCardStatementBlock(
         Column(horizontalAlignment = Alignment.End) {
             Text(dueLabel, style = MaterialTheme.typography.titleSmall)
             Text(
-                "Son ödeme ${statement.summary.dueDate.format(dateFormatter)}",
+                "Son ödeme ${DateUtils.formatDate(statement.summary.dueDate)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -355,8 +367,8 @@ private fun CreditCardStatementBlock(
     }
     Spacer(Modifier.height(12.dp))
     Text(
-        "${statement.summary.statementStartDate.format(dateFormatter)} – " +
-            "${statement.summary.statementEndDate.format(dateFormatter)} hesap dönemi",
+        "${DateUtils.formatDate(statement.summary.statementStartDate)} – " +
+            "${DateUtils.formatDate(statement.summary.statementEndDate)} hesap dönemi",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
@@ -409,7 +421,7 @@ private fun CreditCardStatementBlock(
                     Column(Modifier.weight(1f)) {
                         Text(expense.title, style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "${expense.expenseDate.format(dateFormatter)} • " +
+                            "${DateUtils.formatDate(expense.expenseDate)} • " +
                                 (expense.category?.name ?: "Kategorisiz"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -429,12 +441,16 @@ private fun CreditCardStatementBlock(
 private fun StatementDatesDialog(
     account: PaymentAccount,
     selectedMonth: YearMonth,
+    currentStatementDay: Int?,
+    currentDueDay: Int?,
+    currentRuleSince: YearMonth?,
     onDismiss: () -> Unit,
-    onConfirm: (YearMonth, Int, Int) -> Unit
+    onConfirm: (YearMonth, Int, Int, Boolean) -> Unit
 ) {
     var effectiveMonth by remember { mutableStateOf(selectedMonth.toString()) }
-    var statementDay by remember { mutableStateOf(account.statementDay?.toString().orEmpty()) }
-    var dueDay by remember { mutableStateOf(account.dueDay?.toString().orEmpty()) }
+    var statementDay by remember { mutableStateOf(currentStatementDay?.toString().orEmpty()) }
+    var dueDay by remember { mutableStateOf(currentDueDay?.toString().orEmpty()) }
+    var onlyThisMonth by remember { mutableStateOf(false) }
     val parsedMonth = runCatching { YearMonth.parse(effectiveMonth) }.getOrNull()
     val parsedStatementDay = statementDay.toIntOrNull()
     val parsedDueDay = dueDay.toIntOrNull()
@@ -442,11 +458,26 @@ private fun StatementDatesDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Ekstre tarihleri") },
+        title = { Text("Ekstre tarihleri · ${account.name}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Text(
-                    "Bu kural seçilen ay ve sonrasındaki ekstreleri etkiler.",
+                    buildString {
+                        append("${DateUtils.formatMonthYear(selectedMonth)} için geçerli: ")
+                        append(currentStatementDay?.let { "kesim $it" } ?: "kesim günü yok")
+                        append(", ")
+                        append(currentDueDay?.let { "son ödeme $it" } ?: "son ödeme günü yok")
+                        currentRuleSince?.let { append(" (${DateUtils.formatMonthYear(it)} kuralı)") }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    if (onlyThisMonth) {
+                        "Yalnızca seçilen ayın ekstresi değişir; sonraki ay mevcut günlere döner."
+                    } else {
+                        "Bu kural seçilen ay ve sonrasındaki ekstreleri etkiler. Geçmiş ekstreler değişmez."
+                    },
                     style = MaterialTheme.typography.bodySmall
                 )
                 OutlinedTextField(
@@ -467,12 +498,20 @@ private fun StatementDatesDialog(
                     label = { Text("Son ödeme günü") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Sadece bu ay için", style = MaterialTheme.typography.bodyMedium)
+                    Switch(checked = onlyThisMonth, onCheckedChange = { onlyThisMonth = it })
+                }
             }
         },
         confirmButton = {
             Button(
                 enabled = valid,
-                onClick = { onConfirm(parsedMonth!!, parsedStatementDay!!, parsedDueDay!!) }
+                onClick = { onConfirm(parsedMonth!!, parsedStatementDay!!, parsedDueDay!!, onlyThisMonth) }
             ) { Text("Kaydet") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } }

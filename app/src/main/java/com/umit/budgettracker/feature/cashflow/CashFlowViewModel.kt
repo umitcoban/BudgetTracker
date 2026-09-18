@@ -18,11 +18,13 @@ import com.umit.budgettracker.core.domain.model.FixedExpenseMonthlyPayment
 import com.umit.budgettracker.core.domain.model.Income
 import com.umit.budgettracker.core.domain.model.LoanMonthlyPayment
 import com.umit.budgettracker.core.domain.model.PaymentAccount
+import com.umit.budgettracker.core.domain.model.SalaryRule
 import com.umit.budgettracker.core.domain.model.SubscriptionMonthlyPayment
 import com.umit.budgettracker.core.domain.repository.CreditCardStatementRuleRepository
 import com.umit.budgettracker.core.domain.repository.ExpenseAdjustmentRepository
 import com.umit.budgettracker.core.domain.repository.ExpenseRepository
 import com.umit.budgettracker.core.domain.repository.IncomeRepository
+import com.umit.budgettracker.core.domain.repository.SalaryRepository
 import com.umit.budgettracker.core.domain.repository.PaymentAccountRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -37,6 +39,7 @@ class CashFlowViewModel @Inject constructor(
     private val adjustmentRepository: ExpenseAdjustmentRepository,
     private val statementRuleRepository: CreditCardStatementRuleRepository,
     private val incomeRepository: IncomeRepository,
+    private val salaryRepository: SalaryRepository,
     private val accountRepository: PaymentAccountRepository,
     private val statementCalculator: CreditCardStatementCalculator,
     private val subscriptionCalculator: SubscriptionMonthlyCalculator,
@@ -73,9 +76,10 @@ class CashFlowViewModel @Inject constructor(
                 accountRepository.observeActiveAccounts(),
                 subscriptionCalculator.getPaymentsForMonth(month),
                 loanCalculator.getPaymentsForMonth(month),
-                fixedExpenseCalculator.getPaymentsForMonth(month)
-            ) { accounts, subscriptions, loans, fixedExpenses ->
-                CashFlowPlannedInputs(accounts, subscriptions, loans, fixedExpenses)
+                fixedExpenseCalculator.getPaymentsForMonth(month),
+                salaryRepository.observeSalaryForMonth(month)
+            ) { accounts, subscriptions, loans, fixedExpenses, salaryRule ->
+                CashFlowPlannedInputs(accounts, subscriptions, loans, fixedExpenses, salaryRule)
             }
 
             combine(
@@ -83,6 +87,20 @@ class CashFlowViewModel @Inject constructor(
                 plannedFlow
             ) { actual, planned ->
                 val list = mutableListOf<CashFlowEvent>()
+
+                // Salary rules carry no pay day, so the month's salary is placed on day 1.
+                planned.salaryRule?.takeIf { it.amount > 0L }?.let { salary ->
+                    list.add(
+                        CashFlowEvent(
+                            date = month.atDay(1),
+                            title = "Maaş",
+                            amount = salary.amount,
+                            type = CashFlowEventType.INCOME,
+                            sourceId = salary.id,
+                            description = "Aylık maaş · ay başı varsayıldı"
+                        )
+                    )
+                }
 
                 actual.incomes.forEach { income ->
                     list.add(
@@ -97,7 +115,8 @@ class CashFlowViewModel @Inject constructor(
                     )
                 }
                 
-                actual.expenses.forEach { e ->
+                // Card purchases are not cash movements; the statement payment below is.
+                actual.expenses.filter { it.paymentSourceType != AccountType.CREDIT_CARD }.forEach { e ->
                     list.add(
                         CashFlowEvent(
                             date = e.expenseDate,
@@ -203,5 +222,6 @@ private data class CashFlowPlannedInputs(
     val accounts: List<PaymentAccount>,
     val subscriptions: List<SubscriptionMonthlyPayment>,
     val loans: List<LoanMonthlyPayment>,
-    val fixedExpenses: List<FixedExpenseMonthlyPayment>
+    val fixedExpenses: List<FixedExpenseMonthlyPayment>,
+    val salaryRule: SalaryRule?
 )

@@ -13,8 +13,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.umit.budgettracker.core.domain.model.InstallmentGroup
+import com.umit.budgettracker.core.domain.calculator.InstallmentProgress
+import com.umit.budgettracker.core.ui.components.FinanceCard
+import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
+import com.umit.budgettracker.core.ui.components.StatusPill
+import com.umit.budgettracker.core.util.DateUtils
 import com.umit.budgettracker.core.util.MoneyFormatter
+import java.time.YearMonth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -22,12 +27,22 @@ fun InstallmentsScreen(
     onBack: () -> Unit,
     viewModel: InstallmentsViewModel = hiltViewModel()
 ) {
-    val groups by viewModel.installmentGroups.collectAsState()
+    val state by viewModel.uiState.collectAsState()
+    val showCompleted by viewModel.showCompleted.collectAsState()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Taksitler") },
+                title = {
+                    Column {
+                        Text("Taksitler")
+                        Text(
+                            "Taksitli alışverişler ve kalan ödemeler",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
@@ -36,18 +51,59 @@ fun InstallmentsScreen(
             )
         }
     ) { padding ->
-        if (groups.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text(text = "Aktif taksit bulunamadı.")
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                FinanceCard {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Devam eden taksitlerin kalan toplamı",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            MoneyFormatter.format(state.activeRemainingAmount),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "Her taksit, tarihi geldiği ay harcamalarda ve kart ekstresinde ayrı bir kayıt olarak yer alır.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(groups) { group ->
-                    InstallmentGroupRow(group = group, onDelete = { viewModel.deleteInstallmentGroup(group.id) })
+
+            item {
+                FinanceSectionHeader(
+                    title = "Devam edenler",
+                    subtitle = if (state.active.isEmpty()) "Devam eden taksit yok" else "${state.active.size} taksitli alışveriş"
+                )
+            }
+            items(state.active, key = { it.group.id }) { progress ->
+                InstallmentGroupRow(progress = progress, onDelete = { viewModel.deleteInstallmentGroup(progress.group.id) })
+            }
+
+            if (state.completedCount > 0) {
+                item {
+                    FinanceSectionHeader(
+                        title = "Tamamlananlar",
+                        subtitle = "${state.completedCount} alışverişin tüm taksitleri geçti",
+                        action = {
+                            FilterChip(
+                                selected = showCompleted,
+                                onClick = viewModel::toggleShowCompleted,
+                                label = { Text(if (showCompleted) "Gizle" else "Göster") }
+                            )
+                        }
+                    )
+                }
+                items(state.completed, key = { it.group.id }) { progress ->
+                    InstallmentGroupRow(progress = progress, onDelete = { viewModel.deleteInstallmentGroup(progress.group.id) })
                 }
             }
         }
@@ -55,25 +111,57 @@ fun InstallmentsScreen(
 }
 
 @Composable
-fun InstallmentGroupRow(group: InstallmentGroup, onDelete: () -> Unit) {
+fun InstallmentGroupRow(progress: InstallmentProgress, onDelete: () -> Unit) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val group = progress.group
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = group.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(text = "Toplam: ${MoneyFormatter.format(group.totalAmount)}", style = MaterialTheme.typography.bodyMedium)
-                Text(text = "Taksit Sayısı: ${group.installmentCount}", style = MaterialTheme.typography.bodySmall)
-                Text(text = "Kategori: ${group.category?.name ?: "-"}", style = MaterialTheme.typography.bodySmall)
+    FinanceCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(group.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        listOfNotNull(group.category?.name, group.account?.name).joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (progress.isCompleted) {
+                    StatusPill(
+                        text = "Tamamlandı",
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                } else {
+                    StatusPill(
+                        text = "${progress.elapsedCount} / ${group.installmentCount}",
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                IconButton(onClick = { showDeleteConfirm = true }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Sil")
+                }
             }
-            IconButton(onClick = { showDeleteConfirm = true }) {
-                Icon(Icons.Default.Delete, contentDescription = "Sil")
+            LinearProgressIndicator(
+                progress = { progress.elapsedCount.toFloat() / group.installmentCount.coerceAtLeast(1) },
+                modifier = Modifier.fillMaxWidth().height(6.dp),
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    "Toplam ${MoneyFormatter.format(group.totalAmount)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    if (progress.isCompleted) {
+                        "Başlangıç ${DateUtils.formatMonthYear(YearMonth.from(group.startDate))}"
+                    } else {
+                        "Kalan ${MoneyFormatter.format(progress.remainingAmount)} · sonraki ${DateUtils.formatDate(progress.nextInstallmentDate!!)}"
+                    },
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }

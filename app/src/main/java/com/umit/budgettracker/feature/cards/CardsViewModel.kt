@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.YearMonth
 import javax.inject.Inject
@@ -116,9 +117,42 @@ class CardsViewModel @Inject constructor(
         }
     }
 
-    fun saveStatementRule(accountId: Long, effectiveFromMonth: YearMonth, statementDay: Int, dueDay: Int) {
+    val statementRules: StateFlow<List<CreditCardStatementRule>> = statementRuleRepository.observeAllRules()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * Saves the rule from [effectiveFromMonth] onward. With [onlyThisMonth] the month after gets a
+     * rule restoring whatever was in force before, so a one-off shift (11 -> 12) does not leak
+     * into later statements. An existing rule starting that next month is left untouched.
+     */
+    fun saveStatementRule(
+        accountId: Long,
+        effectiveFromMonth: YearMonth,
+        statementDay: Int,
+        dueDay: Int,
+        onlyThisMonth: Boolean = false
+    ) {
         viewModelScope.launch {
+            val nextMonth = effectiveFromMonth.plusMonths(1)
+            val restore = if (onlyThisMonth) {
+                val rules = statementRuleRepository.observeAllRules().first()
+                val account = repository.getAccountById(accountId)
+                val alreadyDefined = rules.any { it.accountId == accountId && it.effectiveFromMonth == nextMonth }
+                val current = rules
+                    .filter { it.accountId == accountId && !it.effectiveFromMonth.isAfter(nextMonth) }
+                    .maxByOrNull { it.effectiveFromMonth }
+                val restoreStatementDay = current?.statementDay ?: account?.statementDay
+                val restoreDueDay = current?.dueDay ?: account?.dueDay
+                if (!alreadyDefined && restoreStatementDay != null && restoreDueDay != null) {
+                    CreditCardStatementRule(0, accountId, nextMonth, restoreStatementDay, restoreDueDay)
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
             statementRuleRepository.saveRule(CreditCardStatementRule(0, accountId, effectiveFromMonth, statementDay, dueDay))
+            restore?.let { statementRuleRepository.saveRule(it) }
         }
     }
 }
@@ -130,6 +164,9 @@ data class CardStatementUiModel(
     val adjustmentsByExpenseId: Map<Long, List<ExpenseAdjustment>>
 ) {
     val isPaid: Boolean get() = payment?.isPaid == true
+
+    /** A statement with nothing on it is neither paid nor waiting. */
+    val isPending: Boolean get() = !isPaid && totalAmount > 0L
     val totalAmount: Long get() = summary.expenses.sumOf { it.netAmount(adjustmentsByExpenseId) }
     fun netAmount(expense: Expense): Long = expense.netAmount(adjustmentsByExpenseId)
 }

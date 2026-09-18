@@ -48,21 +48,24 @@ fun SubscriptionsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Abonelikler") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
+            Column {
+                TopAppBar(
+                    title = { Text("Abonelikler") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
+                        }
                     }
-                },
-                actions = {
-                    MonthSelector(
-                        selectedMonth = selectedMonth,
-                        onMonthChange = { viewModel.previousMonth() },
-                        onNextMonth = { viewModel.nextMonth() }
-                    )
-                }
-            )
+                )
+                MonthSelector(
+                    selectedMonth = selectedMonth,
+                    onMonthChange = { viewModel.previousMonth() },
+                    onNextMonth = { viewModel.nextMonth() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {

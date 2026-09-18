@@ -275,6 +275,8 @@ Rules:
 - A rule starts from `effectiveFromMonth`; the latest rule at or before the relevant month applies.
 - Saving a new rule must preserve prior rules and historical expense planning.
 - Statement day determines the statement-closing month for an expense; due day is resolved from the closing month so changes do not shift older statements.
+- A statement period starts the day after the previous month's statement closed **using that month's own rule**, so a statement day that moves between months (11 → 12 → 11) leaves no gap and no overlap.
+- The Cards dialog offers "Sadece bu ay için": it saves the rule for the chosen month and a second rule for the following month restoring the previously effective days (unless a rule already starts that month).
 - The Cards screen and monthly budget/dashboard projections must use the same rule history.
 - Database migration `14 -> 15` creates `credit_card_statement_rules`; JSON schema version 13 exports and restores these rules.
 
@@ -346,6 +348,7 @@ Rules:
 - The UI may show the calculated amount as a read-only preview, but the ViewModel or domain calculator must calculate it again before saving.
 - Existing loans retain their stored monthly-payment values until the user edits the record.
 - A loan payment is recorded once per loan and payment month. Marking a payment as paid removes only that month's planned loan payment; it must not delete historical payment records.
+- Marking a payment as paid also inserts an `Expense` linked through `loanId` (title `"<loan> (n/N)"`, dated on the loan's payment day, category/account from the loan — falling back to the default `Kredi` category and the first bank account for loans saved before the form collected them). This is what keeps paid instalments inside Harcamalar, reports and cash flow; the loan form therefore requires a category and a payment account.
 
 ## Budget Warning Rule
 
@@ -363,6 +366,14 @@ Percentages are integer arithmetic. Upcoming-payment rules only apply when the s
 ## Monthly Summary Batching Rule
 
 `MonthlyBudgetCalculator.getSummariesForMonths(months)` is the only path that opens database flows; `getSummaryForMonth` wraps it. Screens that need several months (Reports, Dashboard history, PDF) must pass the whole list rather than combining single-month calls. The calculator loads expenses for `[min(months) − 3 baseline months − 2 planning-shift months, max(months)]`; `MAX_PLANNING_MONTH_SHIFT` must be kept in step with the credit-card planning-month logic.
+
+## Cash Flow Rule
+
+The cash-flow calendar lists cash movements, not accounting entries:
+
+- Salary is an inflow on day 1 of the month (salary rules have no pay day) and one-off incomes on their dates.
+- Expenses paid from cash/bank accounts are outflows on their dates; credit-card purchases are **not** listed — the card's statement payment on its due date is the outflow.
+- Planned subscription, loan and fixed-expense payments appear on their days until processed.
 
 ## Local Reminder Rule
 
