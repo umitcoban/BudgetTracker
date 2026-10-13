@@ -15,6 +15,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import com.umit.budgettracker.core.parsing.XlsReader
 import org.xmlpull.v1.XmlPullParser
 import java.util.zip.ZipInputStream
 import javax.inject.Inject
@@ -25,8 +26,8 @@ import kotlin.coroutines.resumeWithException
 /**
  * Turns a user-picked file into plain text, entirely on device:
  * images → ML Kit OCR (bundled Latin model, no network), PDF → text layer is not available on
- * Android so pages are rendered and OCR'd, XLSX → first sheet as tab-separated rows,
- * CSV/TXT → read as is. Nothing is written to storage.
+ * Android so pages are rendered and OCR'd, XLS / XLSX → first sheet as tab-separated rows with
+ * column positions kept, CSV/TXT → read as is. Nothing is written to storage.
  */
 @Singleton
 class DocumentTextExtractor @Inject constructor(
@@ -43,6 +44,9 @@ class DocumentTextExtractor @Inject constructor(
             mime.contains("spreadsheetml") || name.endsWith(".xlsx") -> extractXlsx(uri)
             else -> context.contentResolver.openInputStream(uri)?.use { stream ->
                 val bytes = stream.readBytes()
+                // Legacy .xls (Garanti, QNB, Yapı Kredi downloads) is detected by its OLE2 signature,
+                // whatever MIME type the file manager reports.
+                if (XlsReader.isXls(bytes)) return@use XlsReader.toText(XlsReader.readFirstSheet(bytes))
                 // Turkish bank CSVs are often Windows-1254; fall back when UTF-8 shows replacement chars.
                 val utf8 = String(bytes, Charsets.UTF_8)
                 if (utf8.contains('�')) String(bytes, charset("windows-1254")) else utf8
@@ -119,28 +123,41 @@ class DocumentTextExtractor @Inject constructor(
         val sheet = sheetXml ?: return ""
         val parser = Xml.newPullParser().apply { setInput(sheet.inputStream(), "UTF-8") }
         val rows = mutableListOf<String>()
-        var row = mutableListOf<String>()
+        var row = sortedMapOf<Int, String>()
         var cellType: String? = null
+        var cellColumn = 0
         var inValue = false
         while (parser.next() != XmlPullParser.END_DOCUMENT) {
             when (parser.eventType) {
                 XmlPullParser.START_TAG -> when (parser.name) {
-                    "row" -> row = mutableListOf()
-                    "c" -> cellType = parser.getAttributeValue(null, "t")
+                    "row" -> row = sortedMapOf()
+                    "c" -> {
+                        cellType = parser.getAttributeValue(null, "t")
+                        cellColumn = parser.getAttributeValue(null, "r")?.let { columnIndex(it) } ?: (if (row.isEmpty()) 0 else row.lastKey() + 1)
+                    }
                     "v", "t" -> inValue = true
                 }
                 XmlPullParser.TEXT -> if (inValue) {
                     val text = parser.text
-                    row += if (cellType == "s") sharedStrings.getOrElse(text.trim().toIntOrNull() ?: -1) { text } else text
+                    row[cellColumn] = (row[cellColumn] ?: "") +
+                        when (cellType) {
+                            "s" -> sharedStrings.getOrElse(text.trim().toIntOrNull() ?: -1) { text }
+                            null, "n" -> text.replace('.', ',') // numeric cell: "2005.74" → "2005,74"
+                            else -> text
+                        }
                 }
                 XmlPullParser.END_TAG -> when (parser.name) {
                     "v", "t" -> inValue = false
-                    "row" -> rows += row.joinToString("\t")
+                    "row" -> rows += if (row.isEmpty()) "" else (0..row.lastKey()).joinToString("\t") { row[it].orEmpty() }
                 }
             }
         }
         return rows.joinToString("\n")
     }
+
+    /** "C12" → 2. */
+    private fun columnIndex(reference: String): Int =
+        reference.takeWhile { it.isLetter() }.fold(0) { acc, c -> acc * 26 + (c.uppercaseChar() - 'A' + 1) } - 1
 
     private fun parseSharedStrings(bytes: ByteArray): List<String> {
         val parser = Xml.newPullParser().apply { setInput(bytes.inputStream(), "UTF-8") }

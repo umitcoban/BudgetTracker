@@ -152,7 +152,7 @@ fun FundImportScreen(
                         imageLauncher.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     }
                     SourceButton(Icons.Default.UploadFile, "Dosya", Modifier.weight(1f)) {
-                        fileLauncher.launch(arrayOf("text/*", "application/pdf", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/csv", "image/*"))
+                        fileLauncher.launch(arrayOf("text/*", "application/pdf", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/csv", "image/*"))
                     }
                 }
             }
