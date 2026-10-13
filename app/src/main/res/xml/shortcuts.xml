@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_add"
+        android:shortcutId="quick_add"
+        android:shortcutLongLabel="@string/shortcut_quick_add_long"
+        android:shortcutShortLabel="@string/shortcut_quick_add">
+        <intent
+            android:action="com.umit.budgettracker.QUICK_ADD"
+            android:targetClass="com.umit.budgettracker.MainActivity"
+            android:targetPackage="com.umit.budgettracker" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_receipt"
+        android:shortcutId="scan_receipt"
+        android:shortcutLongLabel="@string/shortcut_scan_receipt_long"
+        android:shortcutShortLabel="@string/shortcut_scan_receipt">
+        <intent
+            android:action="com.umit.budgettracker.SCAN_RECEIPT"
+            android:targetClass="com.umit.budgettracker.MainActivity"
+            android:targetPackage="com.umit.budgettracker" />
+    </shortcut>
+</shortcuts>

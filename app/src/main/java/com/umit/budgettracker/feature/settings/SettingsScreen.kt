@@ -15,6 +15,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.umit.budgettracker.core.navigation.Screen
+import com.umit.budgettracker.core.ui.components.FinanceCard
+import com.umit.budgettracker.core.ui.components.IconBadge
+import androidx.compose.ui.text.style.TextOverflow
 import java.time.YearMonth
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,113 +90,91 @@ fun SettingsScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Ayarlar") }) },
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            Column {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text("Menü", style = MaterialTheme.typography.titleLarge)
+                            Text(
+                                "Araçlar, planlama ve ayarlar",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                )
+                // In the top bar rather than the list so a running backup doesn't shift the scroll position.
+                if (isLoading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
-        if (isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        }
-
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding)
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            item { SettingsSectionTitle("Uygulama Yönetimi") }
-            item {
-                SettingsItem(
-                    title = "Kategoriler",
-                    icon = Icons.Default.Category,
-                    onClick = { onNavigate(Screen.Categories.route) }
-                )
-            }
-            item {
-                SettingsItem(
-                    title = "Abonelikler",
-                    icon = Icons.Default.Sync,
-                    onClick = { onNavigate(Screen.Subscriptions.route) }
-                )
-            }
-            item {
-                SettingsItem(
-                    title = "Sabit Giderler",
-                    icon = Icons.Default.EventRepeat,
-                    onClick = { onNavigate(Screen.FixedExpenses.route) }
-                )
-            }
-            item {
-                SettingsItem(
-                    title = "Krediler",
-                    icon = Icons.Default.AccountBalance,
-                    onClick = { onNavigate(Screen.Loans.route) }
-                )
+            hubSections.forEach { section ->
+                item(key = section.title) { HubSectionTitle(section.title) }
+                section.tiles.chunked(2).forEach { row ->
+                    item(key = section.title + row.first().screen.route) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            row.forEach { tile ->
+                                HubTile(tile, modifier = Modifier.weight(1f)) { onNavigate(tile.screen.route) }
+                            }
+                            if (row.size == 1) Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
             }
 
-            item { SettingsSectionTitle("Yedekleme ve Dışa Aktarma") }
-            
+            item { HubSectionTitle("Kayıt yönetimi") }
             item {
-                SettingsItem(
-                    title = "Tam Yedek Al (JSON + Fotoğraflar)",
-                    icon = Icons.Default.Archive,
-                    enabled = !isLoading,
-                    onClick = { createFullBackupLauncher.launch("budgettracker_full_backup.zip") }
-                )
+                FinanceCard {
+                    Column {
+                        recordScreens.forEachIndexed { index, screen ->
+                            SettingsItem(title = screen.title, icon = screen.icon, onClick = { onNavigate(screen.route) })
+                            if (index != recordScreens.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
+                    }
+                }
             }
+
+            item { HubSectionTitle("Uygulama") }
             item {
-                SettingsItem(
-                    title = "Tam Yedek Yükle",
-                    icon = Icons.Default.Unarchive,
-                    enabled = !isLoading,
-                    onClick = { openFullBackupLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }
-                )
+                FinanceCard {
+                    SettingsItem(
+                        title = Screen.Preferences.title,
+                        subtitle = "Kilit, veri kaynakları, bildirimler, widget",
+                        icon = Screen.Preferences.icon,
+                        onClick = { onNavigate(Screen.Preferences.route) }
+                    )
+                }
             }
+
+            item { HubSectionTitle("Yedekleme ve dışa aktarma") }
             item {
-                SettingsItem(
-                    title = "JSON Dışa Aktar",
-                    icon = Icons.Default.Download,
-                    enabled = !isLoading,
-                    onClick = { createJsonLauncher.launch("budgettracker_backup.json") }
-                )
-            }
-            item {
-                SettingsItem(
-                    title = "JSON İçe Aktar",
-                    icon = Icons.Default.Upload,
-                    enabled = !isLoading,
-                    onClick = { openJsonLauncher.launch(arrayOf("application/json")) }
-                )
-            }
-            item {
-                SettingsItem(
-                    title = "CSV Dışa Aktar (Harcamalar)",
-                    icon = Icons.Default.TableChart,
-                    enabled = !isLoading,
-                    onClick = { createCsvLauncher.launch("budgettracker_expenses.csv") }
-                )
-            }
-            item {
-                SettingsItem(
-                    title = "PDF Rapor Dışa Aktar (Bu Ay + Son 12 Ay)",
-                    icon = Icons.Default.PictureAsPdf,
-                    enabled = !isLoading,
-                    onClick = { createPdfLauncher.launch("budgettracker_report.pdf") }
-                )
-            }
-            item {
-                SettingsItem(
-                    title = "Veritabanı Yedeği Al (.db)",
-                    icon = Icons.Default.Storage,
-                    enabled = !isLoading,
-                    onClick = { createDbLauncher.launch("budgettracker.db") }
-                )
-            }
-            item {
-                SettingsItem(
-                    title = "Veritabanı Geri Yükle",
-                    icon = Icons.Default.SettingsBackupRestore,
-                    enabled = !isLoading,
-                    onClick = { openDbLauncher.launch(arrayOf("*/*")) }
-                )
+                FinanceCard {
+                    Column {
+                        val backupItems = listOf(
+                            Triple("Tam yedek al (JSON + fotoğraflar)", Icons.Default.Archive) { createFullBackupLauncher.launch("budgettracker_full_backup.zip") },
+                            Triple("Tam yedek yükle", Icons.Default.Unarchive) { openFullBackupLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                            Triple("JSON dışa aktar", Icons.Default.Download) { createJsonLauncher.launch("budgettracker_backup.json") },
+                            Triple("JSON içe aktar", Icons.Default.Upload) { openJsonLauncher.launch(arrayOf("application/json")) },
+                            Triple("CSV dışa aktar (harcamalar)", Icons.Default.TableChart) { createCsvLauncher.launch("budgettracker_expenses.csv") },
+                            Triple("PDF rapor (bu ay + 12 ay + yıl özeti)", Icons.Default.PictureAsPdf) { createPdfLauncher.launch("budgettracker_report.pdf") },
+                            Triple("Veritabanı yedeği al (.db)", Icons.Default.Storage) { createDbLauncher.launch("budgettracker.db") },
+                            Triple("Veritabanı geri yükle", Icons.Default.SettingsBackupRestore) { openDbLauncher.launch(arrayOf("*/*")) }
+                        )
+                        backupItems.forEachIndexed { index, (title, icon, action) ->
+                            SettingsItem(title = title, icon = icon, enabled = !isLoading, onClick = action)
+                            if (index != backupItems.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
+                    }
+                }
             }
         }
 
@@ -223,6 +204,80 @@ private data class PendingRestore(
     val action: () -> Unit
 )
 
+private data class HubTile(val screen: Screen, val subtitle: String)
+private data class HubSection(val title: String, val tiles: List<HubTile>)
+
+private val hubSections = listOf(
+    HubSection(
+        "Varlık ve birikim",
+        listOf(
+            HubTile(Screen.Assets, "Altın, döviz, fon, mevduat"),
+            HubTile(Screen.Goals, "Kumbaralar ve acil fon"),
+            HubTile(Screen.NetWorth, "Aylık net değer"),
+            HubTile(Screen.Inflation, "TÜFE ve reel değer")
+        )
+    ),
+    HubSection(
+        "Planlama ve analiz",
+        listOf(
+            HubTile(Screen.PlannedExpenses, "Kasko, MTV, büyük alımlar"),
+            HubTile(Screen.Simulation, "Senaryo ve zam planı"),
+            HubTile(Screen.CashFlow, "Takvim ve nakit tahmini"),
+            HubTile(Screen.YearEnd, "Yılın özeti"),
+            HubTile(Screen.CategoryBudgets, "Aylık limitler"),
+            HubTile(Screen.Insights, "Tekrarlayanlar, taslaklar")
+        )
+    ),
+    HubSection(
+        "Hızlı araçlar",
+        listOf(
+            HubTile(Screen.ReceiptScan, "Fotoğraftan harcama"),
+            HubTile(Screen.StatementImport, "Banka ekstresiyle eşleştir"),
+            HubTile(Screen.FundImport, "Portföy tablosunu oku"),
+            HubTile(Screen.QuickAdd, "Tutar yaz, kaydet")
+        )
+    )
+)
+
+private val recordScreens = listOf(
+    Screen.Categories,
+    Screen.Subscriptions,
+    Screen.FixedExpenses,
+    Screen.Loans,
+    Screen.Installments,
+    Screen.DebtTracking,
+    Screen.ExpenseTemplates
+)
+
+@Composable
+private fun HubSectionTitle(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
+    )
+}
+
+@Composable
+private fun HubTile(tile: HubTile, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    FinanceCard(modifier = modifier.clickable(onClick = onClick)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            IconBadge(icon = tile.screen.icon, size = 38)
+            Column {
+                Text(tile.screen.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    tile.subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun SettingsSectionTitle(title: String) {
     Text(
@@ -238,11 +293,15 @@ fun SettingsItem(
     title: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     enabled: Boolean = true,
+    subtitle: String? = null,
     onClick: () -> Unit
 ) {
     ListItem(
         headlineContent = { Text(title, color = if (enabled) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant) },
-        leadingContent = { Icon(icon, contentDescription = null) },
+        supportingContent = subtitle?.let { { Text(it) } },
+        leadingContent = { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         modifier = Modifier.clickable(enabled = enabled, onClick = onClick)
     )
 }

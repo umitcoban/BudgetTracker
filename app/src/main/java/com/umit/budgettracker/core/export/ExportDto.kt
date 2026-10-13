@@ -26,7 +26,17 @@ data class BudgetTrackerExportDto(
     val netWorthSnapshots: List<NetWorthSnapshotDto>,
     val expenseAttachments: List<ExpenseAttachmentDto> = emptyList(),
     val creditCardStatementPayments: List<CreditCardStatementPaymentDto> = emptyList(),
-    val expenseAdjustments: List<ExpenseAdjustmentDto> = emptyList()
+    val expenseAdjustments: List<ExpenseAdjustmentDto> = emptyList(),
+    // Schema version 15
+    val inflationRates: List<InflationRateDto> = emptyList(),
+    val assets: List<AssetDto> = emptyList(),
+    val marketPrices: List<MarketPriceDto> = emptyList(),
+    val priceAlerts: List<PriceAlertDto> = emptyList(),
+    val savingsGoals: List<SavingsGoalDto> = emptyList(),
+    val goalContributions: List<GoalContributionDto> = emptyList(),
+    val plannedExpenses: List<PlannedExpenseDto> = emptyList(),
+    val merchantRules: List<MerchantRuleDto> = emptyList(),
+    val dismissedSuggestions: List<String> = emptyList()
 )
 
 @Serializable
@@ -180,4 +190,95 @@ data class ExpenseAdjustmentDto(
     val type: String,
     val adjustmentDate: Long,
     val note: String?
+)
+
+@Serializable
+data class InflationRateDto(
+    val month: String,
+    val monthlyRateBp: Int,
+    val annualRateBp: Int? = null,
+    val note: String? = null,
+    val source: String? = null
+)
+
+@Serializable
+data class AssetDto(
+    val id: Long,
+    val name: String,
+    val type: String,
+    val priceCode: String? = null,
+    val quantity: Long,
+    val manualValue: Long? = null,
+    val costAmount: Long? = null,
+    val allocationTag: String? = null,
+    val interestRateBp: Int? = null,
+    val startDate: Long? = null,
+    val maturityDate: Long? = null,
+    val isEmergencyFund: Boolean = false,
+    val isActive: Boolean = true,
+    val note: String? = null
+)
+
+@Serializable
+data class MarketPriceDto(
+    val code: String,
+    val name: String,
+    val price: Long,
+    val previousPrice: Long? = null,
+    val source: String,
+    val updatedAt: Long
+)
+
+@Serializable
+data class PriceAlertDto(
+    val id: Long,
+    val priceCode: String,
+    val condition: String,
+    val threshold: Long,
+    val isActive: Boolean = true,
+    val lastTriggeredAt: Long? = null,
+    val note: String? = null
+)
+
+@Serializable
+data class SavingsGoalDto(
+    val id: Long,
+    val name: String,
+    val targetAmount: Long,
+    val targetMonth: String? = null,
+    val priority: Int = 2,
+    val iconName: String = "savings",
+    val linkedAssetId: Long? = null,
+    val isActive: Boolean = true,
+    val note: String? = null
+)
+
+@Serializable
+data class GoalContributionDto(
+    val id: Long,
+    val goalId: Long,
+    val amount: Long,
+    val date: Long,
+    val note: String? = null
+)
+
+@Serializable
+data class PlannedExpenseDto(
+    val id: Long,
+    val title: String,
+    val amount: Long,
+    val dueDate: Long,
+    val categoryId: Long? = null,
+    val savedAmount: Long = 0,
+    val isYearly: Boolean = false,
+    val isCompleted: Boolean = false,
+    val note: String? = null
+)
+
+@Serializable
+data class MerchantRuleDto(
+    val id: Long,
+    val pattern: String,
+    val categoryId: Long,
+    val hitCount: Int = 1
 )

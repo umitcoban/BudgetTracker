@@ -107,6 +107,7 @@ class MonthlyBudgetCalculator @Inject constructor(
                 val computation = computations.getValue(month)
                 val baseline = (CategoryTrendRules.BASELINE_MONTHS downTo 1)
                     .map { computations.getValue(month.minusMonths(it.toLong())).summary }
+                val calendarMonthExpenses = preparedExpenses.filter { it.calendarMonth == month }.map { it.expense }
                 computation.summary.copy(
                     warnings = BudgetWarningRules.build(
                         month = month,
@@ -115,7 +116,14 @@ class MonthlyBudgetCalculator @Inject constructor(
                         categorySummaries = computation.summary.categorySummaries,
                         cardPayments = computation.cardPayments,
                         loanPayments = computation.loanPayments,
-                        categorySpikes = CategoryTrendRules.detectSpikes(computation.summary, baseline)
+                        categorySpikes = CategoryTrendRules.detectSpikes(computation.summary, baseline),
+                        duplicates = AnomalyRules.findDuplicates(calendarMonthExpenses),
+                        subscriptionIncreases = AnomalyRules.findSubscriptionIncreases(
+                            month = month,
+                            subscriptions = planned.subscriptions.subscriptions,
+                            priceHistory = planned.subscriptions.priceHistory
+                        ),
+                        positiveTrends = AnomalyRules.findPositiveTrends(baseline + computation.summary)
                     )
                 )
             }
@@ -169,6 +177,15 @@ class MonthlyBudgetCalculator @Inject constructor(
         val totalFixedExpenses = fixedExpenses
             .filter { it.fixedExpenseId !in paidFixedExpenseIds }
             .sumOf { it.amount }
+        val essentialPaid = plannedMonthExpenses
+            .filter { it.expense.isEssential() }
+            .sumOf { it.netAmount }
+        val variableExpenses = plannedMonthExpenses
+            .filter {
+                it.expense.subscriptionId == null && it.expense.loanId == null &&
+                    it.expense.fixedExpenseId == null && it.expense.installmentGroupId == null
+            }
+            .sumOf { it.netAmount }
         val suggestedSaving = ((applicableSalary + additionalIncomeAmount - totalExpenses - totalSubscriptionsUnpaid - totalLoans - totalFixedExpenses) / 2)
             .coerceAtLeast(0L)
 
@@ -188,6 +205,11 @@ class MonthlyBudgetCalculator @Inject constructor(
             loanPaymentAmount = totalLoans,
             fixedExpenseAmount = totalFixedExpenses,
             suggestedSavingAmount = suggestedSaving,
+            essentialExpenseAmount = essentialPaid + totalSubscriptionsUnpaid + totalLoans + totalFixedExpenses,
+            variableExpenseAmount = variableExpenses,
+            subscriptionPayments = subscriptions,
+            loanPayments = loans,
+            fixedExpensePayments = fixedExpenses.filter { it.fixedExpenseId !in paidFixedExpenseIds },
             categorySummaries = buildCategorySummaries(
                 plannedMonthExpenses = plannedMonthExpenses,
                 budgets = expense.budgets.filter { it.yearMonth == month }
@@ -275,6 +297,13 @@ private fun buildCardPaymentsDue(
             )
         }
 }
+
+/** Category names whose spending counts as an obligation for the emergency-fund estimate. */
+private val ESSENTIAL_CATEGORY_NAMES = setOf("Kira", "Fatura", "Aidat")
+
+private fun Expense.isEssential(): Boolean =
+    subscriptionId != null || loanId != null || fixedExpenseId != null || installmentGroupId != null ||
+        category?.name in ESSENTIAL_CATEGORY_NAMES
 
 private fun Expense.planningMonth(statementRules: List<CreditCardStatementRule>): YearMonth {
     if (paymentSourceType != AccountType.CREDIT_CARD) {

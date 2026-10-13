@@ -6,6 +6,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
+import com.umit.budgettracker.core.domain.calculator.YearEndReport
 import com.umit.budgettracker.core.domain.model.CategorySummary
 import com.umit.budgettracker.core.domain.model.CategoryTrend
 import com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary
@@ -31,6 +32,10 @@ class PdfExportService @Inject constructor(
             writeMonthPage(writer, data)
             writer.newPage()
             writeYearPage(writer, data)
+            data.yearEnd?.let { report ->
+                writer.newPage()
+                writeYearEndPage(writer, report)
+            }
             writer.finish()
 
             context.contentResolver.openOutputStream(uri)?.use { outputStream ->
@@ -191,6 +196,65 @@ class PdfExportService @Inject constructor(
         if (trends.isNotEmpty()) {
             writer.section("Kategori toplamları")
             writer.categoryTrendTable(trends.take(MAX_TREND_ROWS))
+        }
+    }
+
+    private fun writeYearEndPage(writer: PdfPageWriter, report: YearEndReport) {
+        val painter = writer.painter
+        val last = report.lastMonth
+        writer.text(
+            "${report.year} yıl özeti" + (last?.let { " (Ocak – ${DateUtils.formatMonthYear(it)})" } ?: ""),
+            painter.text(13f, bold = true)
+        )
+        writer.space(8f)
+        writer.keyValueGrid(
+            listOf(
+                "Toplam gelir" to formatMoney(report.totalIncome),
+                "Toplam harcama" to formatMoney(report.totalExpense),
+                "Plan sonrası kalan" to formatMoney(report.totalLeftover),
+                "Birikim hedefleri" to formatMoney(report.totalSavingGoal),
+                "Abonelik toplamı" to formatMoney(report.subscriptionTotal),
+                "Faiz / komisyon / ücret" to formatMoney(report.feeTotal)
+            ),
+            columns = 2
+        )
+        writer.space(6f)
+        report.mostExpensiveMonth?.let {
+            writer.bullet("En pahalı ay: ${DateUtils.formatMonthYear(it.yearMonth)} (${formatMoney(it.totalExpenseAmount)})", painter.text(9f))
+        }
+        report.cheapestMonth?.let {
+            writer.bullet("En az harcanan ay: ${DateUtils.formatMonthYear(it.yearMonth)} (${formatMoney(it.totalExpenseAmount)})", painter.text(9f))
+        }
+
+        writer.section("Geçen yılın aynı dönemine göre")
+        fun percent(bp: Int?) = bp?.let { (if (it > 0) "+" else if (it < 0) "−" else "") + "%" + (kotlin.math.abs(it) / 100) + "," + (kotlin.math.abs(it) % 100).toString().padStart(2, '0') } ?: "–"
+        writer.table(
+            headers = listOf("", "Geçen yıl", "Bu yıl", "Nominal", "Reel"),
+            widths = listOf(0.2f, 0.22f, 0.22f, 0.16f, 0.2f),
+            rows = listOf(
+                listOf("Harcama", formatMoney(report.previousExpense), formatMoney(report.totalExpense), report.expenseChangePercent?.let { "%$it" } ?: "–", percent(report.realExpenseChangeBp)),
+                listOf("Gelir", formatMoney(report.previousIncome), formatMoney(report.totalIncome), report.incomeChangePercent?.let { "%$it" } ?: "–", percent(report.realIncomeChangeBp))
+            )
+        )
+        writer.text(
+            report.inflationBp?.let { "Dönem enflasyonu (TÜFE, aylık oranlardan bileşik): ${percent(it)}" + if (report.inflationEstimated) " – tahmini" else "" }
+                ?: "Enflasyon verisi eksik; reel karşılaştırma yapılamadı.",
+            painter.text(8f, PdfPalette.MUTED)
+        )
+
+        if (report.topCategories.isNotEmpty()) {
+            writer.section("En çok harcanan kategoriler")
+            writer.table(
+                headers = listOf("Kategori", "Tutar", "Pay"),
+                widths = listOf(0.5f, 0.3f, 0.2f),
+                rows = report.topCategories.take(MAX_TREND_ROWS).map { category ->
+                    listOf(
+                        category.name,
+                        formatMoney(category.amount),
+                        if (report.totalExpense > 0L) "%${category.amount * 100L / report.totalExpense}" else "–"
+                    )
+                }
+            )
         }
     }
 
