@@ -26,6 +26,7 @@ import com.umit.budgettracker.core.domain.repository.ExpenseRepository
 import com.umit.budgettracker.core.domain.repository.PaymentAccountRepository
 import com.umit.budgettracker.core.domain.usecase.RecordExpenseUseCase
 import com.umit.budgettracker.core.ocr.DocumentTextExtractor
+import com.umit.budgettracker.core.parsing.BankCategoryMap
 import com.umit.budgettracker.core.parsing.BankStatementParser
 import com.umit.budgettracker.core.parsing.StatementComparison
 import com.umit.budgettracker.core.parsing.StatementMatch
@@ -68,9 +69,20 @@ class StatementImportViewModel @Inject constructor(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
+    /** Last four digits of each card found in the statement (Garanti / QNB files can hold several). */
+    private val _cardHints = MutableStateFlow<List<String>>(emptyList())
+    val cardHints: StateFlow<List<String>> = _cardHints.asStateFlow()
+    private val _selectedCard = MutableStateFlow<String?>(null)
+    val selectedCard: StateFlow<String?> = _selectedCard.asStateFlow()
+
     fun selectAccount(account: PaymentAccount) {
         _account.value = account
         if (_text.value.isNotBlank()) compare()
+    }
+
+    fun selectCard(card: String?) {
+        _selectedCard.value = card
+        if (_text.value.isNotBlank() && _account.value != null) compare()
     }
 
     fun setText(value: String) {
@@ -82,9 +94,32 @@ class StatementImportViewModel @Inject constructor(
         viewModelScope.launch {
             _busy.value = true
             runCatching { extractor.extract(uri) }
-                .onSuccess { _text.value = it; compare() }
+                .onSuccess {
+                    _text.value = it
+                    prepare()
+                    if (_account.value != null) compare()
+                    else _message.value = "Ekstre okundu. Hangi karta ait olduğunu seç."
+                }
                 .onFailure { _message.value = "Dosya okunamadı." }
             _busy.value = false
+        }
+    }
+
+    /**
+     * Reads card sections and, when an account name contains a card's last four digits,
+     * preselects that account and card.
+     */
+    private fun prepare() {
+        val hints = BankStatementParser.parse(_text.value).cardHints
+        _cardHints.value = hints
+        if (_selectedCard.value !in hints) _selectedCard.value = null
+        if (_account.value == null) {
+            accounts.value.firstNotNullOfOrNull { account ->
+                hints.firstOrNull { hint -> account.name.contains(hint) }?.let { account to it }
+            }?.let { (account, hint) ->
+                _account.value = account
+                _selectedCard.value = hint.takeIf { hints.size > 1 }
+            }
         }
     }
 
@@ -94,7 +129,10 @@ class StatementImportViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            val parsed = BankStatementParser.parse(_text.value)
+            val result = BankStatementParser.parse(_text.value)
+            _cardHints.value = result.cardHints
+            val card = _selectedCard.value
+            val parsed = result.copy(transactions = result.transactions.filter { card == null || it.cardHint == null || it.cardHint == card })
             _unread.value = parsed.unreadLines
             if (parsed.transactions.isEmpty()) {
                 _comparison.value = null
@@ -118,7 +156,8 @@ class StatementImportViewModel @Inject constructor(
                 if (recordExpense.findDuplicate(tx.date, tx.amount, tx.description) != null) {
                     skipped++
                 } else {
-                    recordExpense(tx.description, tx.amount, tx.date, categoryId, account.id, note = "Ekstreden")
+                    val note = listOfNotNull("Ekstreden", tx.foreignAmount, tx.installment?.let { "taksit $it" }).joinToString(" · ")
+                    recordExpense(tx.description, tx.amount, tx.date, categoryId, account.id, note = note)
                     added++
                 }
             }
@@ -146,11 +185,14 @@ fun StatementImportScreen(
     val unread by viewModel.unread.collectAsState()
     val busy by viewModel.busy.collectAsState()
     val message by viewModel.message.collectAsState()
+    val cardHints by viewModel.cardHints.collectAsState()
+    val selectedCard by viewModel.selectedCard.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var showText by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf("Yeni") }
     val newItems = comparison?.matches?.filterIsInstance<StatementMatch.New>().orEmpty()
-    var selected by remember(comparison) { mutableStateOf(newItems.indices.toSet()) }
+    // Instalment lines are better added from Taksitler (the remaining months are generated there).
+    var selected by remember(comparison) { mutableStateOf(newItems.indices.filter { newItems[it].transaction.installment == null }.toSet()) }
     var categoryOverrides by remember(comparison) { mutableStateOf<Map<Int, Long>>(emptyMap()) }
     var pickingCategoryFor by remember { mutableStateOf<Int?>(null) }
 
@@ -163,7 +205,11 @@ fun StatementImportScreen(
         }
     }
     val fallbackCategory = categories.firstOrNull { it.name == "Diğer" } ?: categories.firstOrNull()
-    fun categoryFor(index: Int): Long? = categoryOverrides[index] ?: newItems.getOrNull(index)?.suggestedCategoryId ?: fallbackCategory?.id
+    val categoryPairs = categories.map { it.id to it.name }
+    fun suggestedFor(index: Int): Long? = newItems.getOrNull(index)?.let { item ->
+        item.suggestedCategoryId ?: BankCategoryMap.suggest(item.transaction.bankCategory, categoryPairs)
+    }
+    fun categoryFor(index: Int): Long? = categoryOverrides[index] ?: suggestedFor(index) ?: fallbackCategory?.id
 
     DetailScaffold(
         title = "Ekstre Karşılaştır",
@@ -205,7 +251,13 @@ fun StatementImportScreen(
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     FilledTonalButton(onClick = {
-                        fileLauncher.launch(arrayOf("application/pdf", "text/*", "text/csv", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "image/*"))
+                        fileLauncher.launch(
+                            arrayOf(
+                                "application/pdf", "text/*", "text/csv", "image/*",
+                                "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                "application/octet-stream"
+                            )
+                        )
                     }) {
                         Icon(Icons.Default.UploadFile, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
@@ -230,6 +282,19 @@ fun StatementImportScreen(
                 }
                 item {
                     Row { Spacer(Modifier.weight(1f)); Button(onClick = viewModel::compare, enabled = text.isNotBlank()) { Text("Karşılaştır") } }
+                }
+            }
+            if (cardHints.size > 1) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Ekstrede ${cardHints.size} kart var", style = MaterialTheme.typography.labelMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected = selectedCard == null, onClick = { viewModel.selectCard(null) }, label = { Text("Tümü") })
+                            cardHints.forEach { hint ->
+                                FilterChip(selected = selectedCard == hint, onClick = { viewModel.selectCard(hint) }, label = { Text("•••• $hint") })
+                            }
+                        }
+                    }
                 }
             }
             item {
@@ -277,10 +342,35 @@ fun StatementImportScreen(
                                 Spacer(Modifier.width(8.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(item.transaction.description, style = MaterialTheme.typography.titleSmall)
-                                    Text(DateUtils.formatDate(item.transaction.date), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        listOfNotNull(
+                                            DateUtils.formatDate(item.transaction.date),
+                                            item.transaction.cardHint?.takeIf { cardHints.size > 1 }?.let { "•••• $it" },
+                                            item.transaction.foreignAmount,
+                                            item.transaction.bankCategory
+                                        ).joinToString(" · "),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    item.transaction.installment?.let { installment ->
+                                        Text(
+                                            "Taksit $installment · kalan taksitler için Taksitler ekranını kullanman önerilir",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.tertiary
+                                        )
+                                    }
                                     AssistChip(
                                         onClick = { pickingCategoryFor = index },
-                                        label = { Text(categoryName + if (item.suggestedCategoryId != null && categoryOverrides[index] == null) " · öğrenilen" else "") }
+                                        label = {
+                                            Text(
+                                                categoryName + when {
+                                                    categoryOverrides[index] != null -> ""
+                                                    item.suggestedCategoryId != null -> " · öğrenilen"
+                                                    suggestedFor(index) != null -> " · bankanın etiketi"
+                                                    else -> ""
+                                                }
+                                            )
+                                        }
                                     )
                                 }
                                 Text(MoneyFormatter.format(item.transaction.amount), style = MaterialTheme.typography.titleSmall)

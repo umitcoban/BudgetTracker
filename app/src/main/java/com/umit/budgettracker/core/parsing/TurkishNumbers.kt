@@ -69,7 +69,9 @@ object TurkishNumbers {
     /** All number-looking tokens of [line] in order, with their source text. */
     fun tokens(line: String): List<NumberToken> = numberToken.findAll(line).mapNotNull { match ->
         val text = match.value.trim()
-        parseDecimal(text)?.let { NumberToken(text, it, match.range.first, line.getOrNull(match.range.last + 1) == '%' || line.getOrNull(match.range.first - 1) == '%') }
+        // The pattern's optional whitespace can include spaces before the number; start points at the text itself.
+        val start = match.range.first + (match.value.length - match.value.trimStart().length)
+        parseDecimal(text)?.let { NumberToken(text, it, start, line.getOrNull(match.range.last + 1) == '%' || line.getOrNull(start - 1) == '%') }
     }.toList()
 
     data class NumberToken(val text: String, val value: BigDecimal, val start: Int, val isPercent: Boolean) {
