@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BudgetTracker</string>
+    <!-- Only strings that XML (manifest, shortcuts, widget metadata) must reference live here;
+         UI text stays as Kotlin literals. -->
+    <string name="shortcut_quick_add">Harcama ekle</string>
+    <string name="shortcut_quick_add_long">Hızlı harcama ekle</string>
+    <string name="shortcut_scan_receipt">Fiş tara</string>
+    <string name="shortcut_scan_receipt_long">Fişten harcama ekle</string>
+    <string name="widget_description">Bu ayın kalan bütçesi ve hızlı harcama ekleme</string>
+    <string name="capture_service_label">BudgetTracker harcama yakalama</string>
 </resources>

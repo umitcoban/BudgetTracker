@@ -395,3 +395,201 @@ fun InstallmentGroup.toEntity() = InstallmentGroupEntity(
     paymentAccountId = paymentAccountId,
     note = note
 )
+
+// region Database version 17: inflation, assets, prices, goals, planner, assistant
+
+fun InflationRateEntity.toDomain() = InflationRate(
+    month = YearMonth.parse(month),
+    monthlyRateBp = monthlyRateBp,
+    annualRateBp = annualRateBp,
+    note = note,
+    source = source
+)
+
+fun InflationRate.toEntity() = InflationRateEntity(
+    month = month.toString(),
+    monthlyRateBp = monthlyRateBp,
+    annualRateBp = annualRateBp,
+    note = note,
+    source = source
+)
+
+fun AssetEntity.toDomain() = Asset(
+    id = id,
+    name = name,
+    type = runCatching { AssetType.valueOf(type) }.getOrDefault(AssetType.OTHER),
+    priceCode = priceCode,
+    quantity = quantity,
+    manualValue = manualValue,
+    costAmount = costAmount,
+    allocationTag = allocationTag,
+    interestRateBp = interestRateBp,
+    startDate = startDate?.let { LocalDate.ofEpochDay(it) },
+    maturityDate = maturityDate?.let { LocalDate.ofEpochDay(it) },
+    isEmergencyFund = isEmergencyFund,
+    isActive = isActive,
+    note = note
+)
+
+fun Asset.toEntity() = AssetEntity(
+    id = id,
+    name = name,
+    type = type.name,
+    priceCode = priceCode,
+    quantity = quantity,
+    manualValue = manualValue,
+    costAmount = costAmount,
+    allocationTag = allocationTag,
+    interestRateBp = interestRateBp,
+    startDate = startDate?.toEpochDay(),
+    maturityDate = maturityDate?.toEpochDay(),
+    isEmergencyFund = isEmergencyFund,
+    isActive = isActive,
+    note = note
+)
+
+fun MarketPriceEntity.toDomain() = MarketPrice(
+    code = code,
+    name = name,
+    price = price,
+    previousPrice = previousPrice,
+    source = source,
+    updatedAt = updatedAt
+)
+
+fun MarketPrice.toEntity() = MarketPriceEntity(
+    code = code,
+    name = name,
+    price = price,
+    previousPrice = previousPrice,
+    source = source,
+    updatedAt = updatedAt
+)
+
+fun PriceAlertEntity.toDomain() = PriceAlert(
+    id = id,
+    priceCode = priceCode,
+    condition = runCatching { AlertCondition.valueOf(condition) }.getOrDefault(AlertCondition.ABOVE),
+    threshold = threshold,
+    isActive = isActive,
+    lastTriggeredAt = lastTriggeredAt,
+    note = note
+)
+
+fun PriceAlert.toEntity() = PriceAlertEntity(
+    id = id,
+    priceCode = priceCode,
+    condition = condition.name,
+    threshold = threshold,
+    isActive = isActive,
+    lastTriggeredAt = lastTriggeredAt,
+    note = note
+)
+
+fun SavingsGoalEntity.toDomain() = SavingsGoal(
+    id = id,
+    name = name,
+    targetAmount = targetAmount,
+    targetMonth = targetMonth?.let { YearMonth.parse(it) },
+    priority = priority,
+    iconName = iconName,
+    linkedAssetId = linkedAssetId,
+    isActive = isActive,
+    note = note
+)
+
+fun SavingsGoal.toEntity() = SavingsGoalEntity(
+    id = id,
+    name = name,
+    targetAmount = targetAmount,
+    targetMonth = targetMonth?.toString(),
+    priority = priority,
+    iconName = iconName,
+    linkedAssetId = linkedAssetId,
+    isActive = isActive,
+    note = note
+)
+
+fun GoalContributionEntity.toDomain() = GoalContribution(
+    id = id,
+    goalId = goalId,
+    amount = amount,
+    date = LocalDate.ofEpochDay(date),
+    note = note
+)
+
+fun GoalContribution.toEntity() = GoalContributionEntity(
+    id = id,
+    goalId = goalId,
+    amount = amount,
+    date = date.toEpochDay(),
+    note = note
+)
+
+fun PlannedExpenseEntity.toDomain() = PlannedExpense(
+    id = id,
+    title = title,
+    amount = amount,
+    dueDate = LocalDate.ofEpochDay(dueDate),
+    categoryId = categoryId,
+    savedAmount = savedAmount,
+    isYearly = isYearly,
+    isCompleted = isCompleted,
+    note = note
+)
+
+fun PlannedExpense.toEntity() = PlannedExpenseEntity(
+    id = id,
+    title = title,
+    amount = amount,
+    dueDate = dueDate.toEpochDay(),
+    categoryId = categoryId,
+    savedAmount = savedAmount,
+    isYearly = isYearly,
+    isCompleted = isCompleted,
+    note = note
+)
+
+fun PublicHolidayEntity.toDomain() = PublicHoliday(
+    date = LocalDate.ofEpochDay(date),
+    name = name
+)
+
+fun PublicHoliday.toEntity() = PublicHolidayEntity(
+    date = date.toEpochDay(),
+    name = name
+)
+
+fun MerchantRuleEntity.toDomain() = MerchantRule(
+    id = id,
+    pattern = pattern,
+    categoryId = categoryId,
+    hitCount = hitCount
+)
+
+fun MerchantRule.toEntity() = MerchantRuleEntity(
+    id = id,
+    pattern = pattern,
+    categoryId = categoryId,
+    hitCount = hitCount
+)
+
+fun ExpenseDraftEntity.toDomain() = ExpenseDraft(
+    id = id,
+    title = title,
+    amount = amount,
+    date = LocalDate.ofEpochDay(date),
+    sourceLabel = sourceLabel,
+    createdAt = createdAt
+)
+
+fun ExpenseDraft.toEntity() = ExpenseDraftEntity(
+    id = id,
+    title = title,
+    amount = amount,
+    date = date.toEpochDay(),
+    sourceLabel = sourceLabel,
+    createdAt = createdAt
+)
+
+// endregion

@@ -47,6 +47,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.umit.budgettracker.core.domain.model.CashFlowEvent
 import com.umit.budgettracker.core.domain.model.CashFlowEventType
+import com.umit.budgettracker.core.domain.model.CashForecast
+import com.umit.budgettracker.core.domain.usecase.CashForecastUseCase
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.Warning
+import java.time.YearMonth
 import com.umit.budgettracker.core.ui.components.FinanceCard
 import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
 import com.umit.budgettracker.core.ui.components.MetricTile
@@ -60,9 +68,11 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun CashFlowScreen(
     onBack: () -> Unit,
+    onOpenAssets: () -> Unit = {},
     viewModel: CashFlowViewModel = hiltViewModel()
 ) {
     val events by viewModel.events.collectAsState()
+    val forecast by viewModel.forecast.collectAsState()
     val selectedMonth by viewModel.selectedMonth.collectAsState()
     val groupedEvents = events.groupBy { it.date }.toSortedMap()
     val totalIncome = events
@@ -120,6 +130,11 @@ fun CashFlowScreen(
                     outflow = totalOutflow,
                     netFlow = netFlow
                 )
+            }
+            if (selectedMonth == YearMonth.now()) {
+                item {
+                    CashForecastCard(forecast = forecast, onOpenAssets = onOpenAssets)
+                }
             }
             item {
                 FinanceSectionHeader(
@@ -279,6 +294,13 @@ fun CashFlowRow(event: CashFlowEvent) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                event.bankDayNote?.let { note ->
+                    Text(
+                        note,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
             }
             Text(
                 text = (if (isIncome) "+" else "−") + MoneyFormatter.format(event.amount),
@@ -329,4 +351,61 @@ private fun CashFlowEventType.metadata(): EventMetadata = when (this) {
         "Sabit gider",
         Icons.Default.SouthWest
     ) { MaterialTheme.colorScheme.secondary }
+    CashFlowEventType.PLANNED_EXPENSE -> EventMetadata(
+        "Büyük harcama",
+        Icons.Default.Flag
+    ) { MaterialTheme.colorScheme.tertiary }
+}
+
+@Composable
+private fun CashForecastCard(forecast: CashForecast?, onOpenAssets: () -> Unit) {
+    if (forecast == null) {
+        FinanceCard(modifier = Modifier.clickable(onClick = onOpenAssets)) {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Insights, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Akıllı nakit uyarısı", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Varlıklar'a nakit / banka bakiyeni eklersen en sıkışık günü önceden gösteririm.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(Icons.Default.ChevronRight, contentDescription = "Varlıklar", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        return
+    }
+    val message = CashForecastUseCase.describe(forecast)
+    val isTight = forecast.shortfall > 0L
+    FinanceCard(
+        containerColor = if (isTight) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (isTight) Icons.Default.Warning else Icons.Default.Insights,
+                    contentDescription = null,
+                    tint = if (isTight) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    if (isTight) "Nakit açığı riski" else "Önümüzdeki ${CashForecastUseCase.HORIZON_DAYS} gün",
+                    style = MaterialTheme.typography.titleSmall
+                )
+            }
+            Text(
+                message ?: "En düşük tahmini bakiye ${DateUtils.formatDayMonth(forecast.lowestDate)}: " +
+                    MoneyFormatter.format(forecast.lowestBalance),
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                "Başlangıç: Varlıklar'daki nakit / banka toplamı ${MoneyFormatter.format(forecast.startBalance)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
 }

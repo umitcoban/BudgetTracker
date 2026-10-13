@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Camera output for receipt scanning; deleted after the photo is copied into attachments. -->
+    <cache-path name="receipt_capture" path="receipt_capture/" />
+</paths>

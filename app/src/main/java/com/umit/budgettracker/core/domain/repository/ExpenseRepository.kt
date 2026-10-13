@@ -23,6 +23,12 @@ interface ExpenseRepository {
 
     suspend fun getExpenseById(id: Long): Expense?
     suspend fun insertExpense(expense: Expense)
+
+    /** Inserts and returns the new row id (needed to attach a receipt photo right away). */
+    suspend fun insertExpenseReturningId(expense: Expense): Long {
+        insertExpense(expense)
+        return 0L
+    }
     suspend fun updateExpense(expense: Expense)
     suspend fun deleteExpense(expense: Expense)
     suspend fun hasSubscriptionExpenseForMonth(subscriptionId: Long, yearMonth: YearMonth): Boolean

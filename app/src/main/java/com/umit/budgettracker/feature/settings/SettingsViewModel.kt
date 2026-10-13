@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.umit.budgettracker.core.database.DatabaseBackupService
 import com.umit.budgettracker.core.domain.calculator.CategoryTrendRules
 import com.umit.budgettracker.core.domain.calculator.MonthlyBudgetCalculator
+import com.umit.budgettracker.core.domain.usecase.YearEndReportUseCase
 import com.umit.budgettracker.core.export.PdfReportData
 import com.umit.budgettracker.core.export.*
 import com.umit.budgettracker.core.dataimport.JsonImportService
@@ -27,7 +28,8 @@ class SettingsViewModel @Inject constructor(
     private val pdfExportService: PdfExportService,
     private val fullBackupService: FullBackupService,
     private val backupService: DatabaseBackupService,
-    private val calculator: MonthlyBudgetCalculator
+    private val calculator: MonthlyBudgetCalculator,
+    private val yearEndReport: YearEndReportUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<SettingsUiState>(SettingsUiState.Idle)
@@ -72,7 +74,8 @@ class SettingsViewModel @Inject constructor(
             val data = PdfReportData(
                 month = history.last(),
                 history = history,
-                categoryTrends = CategoryTrendRules.buildTrends(history)
+                categoryTrends = CategoryTrendRules.buildTrends(history),
+                yearEnd = runCatching { yearEndReport.build(month.year) }.getOrNull()
             )
             if (pdfExportService.exportReportToPdf(uri, data)) {
                 _uiState.value = SettingsUiState.Success("PDF raporu oluşturuldu.")

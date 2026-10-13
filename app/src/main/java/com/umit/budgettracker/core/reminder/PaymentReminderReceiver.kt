@@ -9,10 +9,13 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.umit.budgettracker.core.work.WorkScheduler
 
 class PaymentReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         PaymentReminderScheduler(context).scheduleNextReminder()
+        // Inflation reminder, smart cash warning, pre-payment and deposit notes run as one worker.
+        WorkScheduler(context.applicationContext).runDailyChecks()
         if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
 
         val notificationManager = context.getSystemService(NotificationManager::class.java)

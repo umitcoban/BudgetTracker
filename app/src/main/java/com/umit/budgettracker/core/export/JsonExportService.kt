@@ -30,7 +30,12 @@ class JsonExportService @Inject constructor(
     private val netWorthRepository: NetWorthRepository,
     private val attachmentRepository: ExpenseAttachmentRepository,
     private val statementPaymentRepository: CreditCardStatementPaymentRepository,
-    private val adjustmentRepository: ExpenseAdjustmentRepository
+    private val adjustmentRepository: ExpenseAdjustmentRepository,
+    private val inflationRepository: InflationRepository,
+    private val assetRepository: AssetRepository,
+    private val savingsGoalRepository: SavingsGoalRepository,
+    private val plannedExpenseRepository: PlannedExpenseRepository,
+    private val assistantRepository: AssistantRepository
 ) {
     // encodeDefaults keeps appName and empty sections in the file so a backup is self-describing.
     private val json = Json { prettyPrint = true; encodeDefaults = true }
@@ -38,7 +43,7 @@ class JsonExportService @Inject constructor(
     suspend fun exportToJson(uri: Uri): ExportResult {
         return try {
             val dto = BudgetTrackerExportDto(
-                schemaVersion = 14,
+                schemaVersion = SCHEMA_VERSION,
                 exportedAt = Instant.now().toString(),
                 salaryRules = salaryRepository.observeAllSalaryRules().first().map { 
                     SalaryRuleDto(it.id, it.amount, it.effectiveStartMonth.toString(), it.note, it.payDay)
@@ -153,7 +158,94 @@ class JsonExportService @Inject constructor(
                 },
                 expenseAdjustments = adjustmentRepository.observeAllAdjustments().first().map {
                     ExpenseAdjustmentDto(it.id, it.expenseId, it.amount, it.type.name, it.adjustmentDate.toEpochDay(), it.note)
-                }
+                },
+                inflationRates = inflationRepository.getAll().map {
+                    InflationRateDto(
+                        month = it.month.toString(),
+                        monthlyRateBp = it.monthlyRateBp,
+                        annualRateBp = it.annualRateBp,
+                        note = it.note,
+                        source = it.source
+                    )
+                },
+                assets = assetRepository.getAssets().map {
+                    AssetDto(
+                        id = it.id,
+                        name = it.name,
+                        type = it.type.name,
+                        priceCode = it.priceCode,
+                        quantity = it.quantity,
+                        manualValue = it.manualValue,
+                        costAmount = it.costAmount,
+                        allocationTag = it.allocationTag,
+                        interestRateBp = it.interestRateBp,
+                        startDate = it.startDate?.toEpochDay(),
+                        maturityDate = it.maturityDate?.toEpochDay(),
+                        isEmergencyFund = it.isEmergencyFund,
+                        isActive = it.isActive,
+                        note = it.note
+                    )
+                },
+                marketPrices = assetRepository.getPrices().map {
+                    MarketPriceDto(
+                        code = it.code,
+                        name = it.name,
+                        price = it.price,
+                        previousPrice = it.previousPrice,
+                        source = it.source,
+                        updatedAt = it.updatedAt
+                    )
+                },
+                priceAlerts = assetRepository.getAlerts().map {
+                    PriceAlertDto(
+                        id = it.id,
+                        priceCode = it.priceCode,
+                        condition = it.condition.name,
+                        threshold = it.threshold,
+                        isActive = it.isActive,
+                        lastTriggeredAt = it.lastTriggeredAt,
+                        note = it.note
+                    )
+                },
+                savingsGoals = savingsGoalRepository.observeGoals().first().map {
+                    SavingsGoalDto(
+                        id = it.id,
+                        name = it.name,
+                        targetAmount = it.targetAmount,
+                        targetMonth = it.targetMonth?.toString(),
+                        priority = it.priority,
+                        iconName = it.iconName,
+                        linkedAssetId = it.linkedAssetId,
+                        isActive = it.isActive,
+                        note = it.note
+                    )
+                },
+                goalContributions = savingsGoalRepository.observeContributions().first().map {
+                    GoalContributionDto(
+                        id = it.id,
+                        goalId = it.goalId,
+                        amount = it.amount,
+                        date = it.date.toEpochDay(),
+                        note = it.note
+                    )
+                },
+                plannedExpenses = plannedExpenseRepository.observeAll().first().map {
+                    PlannedExpenseDto(
+                        id = it.id,
+                        title = it.title,
+                        amount = it.amount,
+                        dueDate = it.dueDate.toEpochDay(),
+                        categoryId = it.categoryId,
+                        savedAmount = it.savedAmount,
+                        isYearly = it.isYearly,
+                        isCompleted = it.isCompleted,
+                        note = it.note
+                    )
+                },
+                merchantRules = assistantRepository.getMerchantRules().map {
+                    MerchantRuleDto(id = it.id, pattern = it.pattern, categoryId = it.categoryId, hitCount = it.hitCount)
+                },
+                dismissedSuggestions = assistantRepository.observeDismissedSuggestionKeys().first().sorted()
             )
 
             val jsonString = json.encodeToString(dto)
@@ -166,6 +258,9 @@ class JsonExportService @Inject constructor(
         }
     }
 }
+
+/** Keep in step with the `dto.schemaVersion > N` guard in JsonImportService. */
+const val SCHEMA_VERSION = 15
 
 sealed class ExportResult {
     data object Success : ExportResult()
