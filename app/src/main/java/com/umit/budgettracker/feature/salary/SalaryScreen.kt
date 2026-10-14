@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.salary
 
+import com.umit.budgettracker.core.ui.components.DetailScaffold
 import com.umit.budgettracker.core.ui.components.DateField
 import com.umit.budgettracker.core.ui.components.MonthField
 import com.umit.budgettracker.core.ui.components.AppAlertDialog
@@ -34,26 +35,10 @@ fun SalaryScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<SalaryRule?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Maaş Planı", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "Düzenli aylık gelirin",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
-                    }
-                }
-            )
-        },
+    DetailScaffold(
+        title = "Maaş Planı",
+        subtitle = "Düzenli aylık gelirin",
+        onBack = onBack,
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
                 Icon(Icons.Default.Add, contentDescription = "Maaşı güncelle")

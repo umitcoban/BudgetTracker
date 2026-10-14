@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.installments
 
+import com.umit.budgettracker.core.ui.components.DetailScaffold
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import com.umit.budgettracker.core.ui.components.AppAlertDialog
@@ -33,26 +34,10 @@ fun InstallmentsScreen(
     val state by viewModel.uiState.collectAsState()
     val showCompleted by viewModel.showCompleted.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Taksitler")
-                        Text(
-                            "Taksitli alışverişler ve kalan ödemeler",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
-                    }
-                }
-            )
-        }
+    DetailScaffold(
+        title = "Taksitler",
+        subtitle = "Taksitli alışverişler ve kalan ödemeler",
+        onBack = onBack,
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),

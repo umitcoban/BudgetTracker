@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.income
 
+import com.umit.budgettracker.core.ui.components.DetailScaffold
 import com.umit.budgettracker.core.ui.components.DateField
 import com.umit.budgettracker.core.ui.components.MonthField
 import com.umit.budgettracker.core.ui.components.AppAlertDialog
@@ -72,29 +73,10 @@ fun IncomeScreen(
     var editingIncome by remember { mutableStateOf<Income?>(null) }
     var showDialog by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Ek Gelirler", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "Yalnızca işlem ayını etkileyen gelirler",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Özete dön"
-                        )
-                    }
-                }
-            )
-        },
+    DetailScaffold(
+        title = "Ek Gelirler",
+        subtitle = "Yalnızca işlem ayını etkileyen gelirler",
+        onBack = onBack,
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
