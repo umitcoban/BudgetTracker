@@ -113,7 +113,7 @@ object BankStatementParser {
             val dateCell = cellNear(cells, cols.headers, cols.date) { TurkishNumbers.findDate(it) != null }
             val date = dateCell?.let { TurkishNumbers.findDate(it)?.date }
             if (date == null) {
-                // Card section headers ("ASIL KART - 5193 **** **** 7575") switch the current card.
+                // Card section headers ("ASIL KART - 5193 **** **** 3333") switch the current card.
                 if (rowCard != null) card = rowCard
                 return@forEach
             }
