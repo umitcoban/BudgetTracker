@@ -199,6 +199,46 @@ class MonthlyBudgetCalculatorDataIntegrityTest {
         assertTrue(warning.message, warning.message.startsWith("Market bütçesi"))
     }
 
+    @Test
+    fun getSummaryForMonth_plansCardPaidFixedExpenseInItsStatementMonth() = runBlocking {
+        // Statement closes on the 11th and is paid on the 20th, so a bill on the 22nd is paid
+        // with the next month's statement. The fixed expense starts in October.
+        val card = PaymentAccount(2L, "Kart", AccountType.CREDIT_CARD, 11, 20, true)
+        val internet = FixedExpense(
+            id = 10L, title = "İnternet", amount = 900L, dayOfMonth = 22,
+            startMonth = YearMonth.of(2026, 10), endMonth = null, categoryId = 1L,
+            paymentAccountId = card.id, note = null, isActive = true, account = card
+        )
+        val calc = calculator(fixedExpenses = listOf(internet))
+
+        // Nothing leaves the account in October; the October bill is November's payment.
+        assertEquals(0L, calc.getSummaryForMonth(YearMonth.of(2026, 10)).first().fixedExpenseAmount)
+        assertEquals(900L, calc.getSummaryForMonth(YearMonth.of(2026, 11)).first().fixedExpenseAmount)
+
+        // Once processed, the October bill is November's card spending and no longer planned.
+        val processed = expense(amount = 900L, date = LocalDate.of(2026, 10, 22), account = card, fixedExpenseId = 10L)
+        val november = calculator(expenses = listOf(processed), fixedExpenses = listOf(internet))
+            .getSummaryForMonth(YearMonth.of(2026, 11)).first()
+        assertEquals(900L, november.totalExpenseAmount)
+        assertEquals(0L, november.fixedExpenseAmount)
+    }
+
+    @Test
+    fun getSummaryForMonth_countsCategorySpendingInTheMonthItWasSpent() = runBlocking {
+        val card = PaymentAccount(2L, "Kart", AccountType.CREDIT_CARD, 11, 20, true)
+        val coffee = Category(id = 7L, name = "Kahve", iconName = "coffee", colorValue = 0, type = CategoryType.EXPENSE, isDefault = true, isActive = true, sortOrder = 0)
+        val septemberCoffee = expense(amount = 5_000L, date = LocalDate.of(2026, 9, 20), account = card, category = coffee)
+        val calc = calculator(expenses = listOf(septemberCoffee))
+
+        val september = calc.getSummaryForMonth(YearMonth.of(2026, 9)).first()
+        val october = calc.getSummaryForMonth(YearMonth.of(2026, 10)).first()
+
+        assertEquals(5_000L, september.categorySummaries.single { it.categoryId == 7L }.amount)
+        assertTrue(october.categorySummaries.none { it.categoryId == 7L })
+        // The card payment itself still belongs to October.
+        assertEquals(5_000L, october.creditCardPaymentAmount)
+    }
+
     private fun calculator(
         expenses: List<Expense> = emptyList(),
         fixedExpenses: List<FixedExpense> = emptyList(),

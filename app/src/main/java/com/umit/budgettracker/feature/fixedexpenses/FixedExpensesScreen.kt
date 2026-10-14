@@ -1,5 +1,11 @@
 package com.umit.budgettracker.feature.fixedexpenses
 
+import com.umit.budgettracker.core.ui.components.DateField
+import com.umit.budgettracker.core.ui.components.MonthField
+import androidx.compose.material.icons.filled.EventRepeat
+import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
+import com.umit.budgettracker.core.ui.components.EmptyState
+import com.umit.budgettracker.core.ui.components.DetailScaffold
 import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -81,28 +87,34 @@ fun FixedExpensesScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text("Sabit Giderler") },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
-                        }
-                    }
-                )
-                MonthSelector(
-                    selectedMonth = selectedMonth,
-                    onMonthChange = { viewModel.previousMonth() },
-                    onNextMonth = { viewModel.nextMonth() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
-                )
-            }
+    val processedIds by viewModel.processedIds.collectAsState()
+    val applies = { e: FixedExpense ->
+        e.isActive && !selectedMonth.isBefore(e.startMonth) && (e.endMonth == null || !selectedMonth.isAfter(e.endMonth))
+    }
+    val current = fixedExpenses.filter(applies)
+    val toProcess = current.filter { it.id !in processedIds }
+    val processed = current.filter { it.id in processedIds }
+    val others = fixedExpenses.filterNot(applies)
+    var showOthers by remember { mutableStateOf(false) }
+
+    @Composable
+    fun FixedItem(expense: FixedExpense) = FixedExpenseRow(
+        expense = expense,
+        isProcessed = expense.id in processedIds,
+        applies = applies(expense),
+        onEdit = {
+            editingExpense = expense
+            showDialog = true
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        onDelete = { viewModel.deleteFixedExpense(expense) },
+        onMarkAsPaid = { viewModel.markAsPaid(expense) }
+    )
+
+    DetailScaffold(
+        title = "Sabit Giderler",
+        subtitle = "Kira, aidat, fatura gibi düzenli ödemeler",
+        onBack = onBack,
+        snackbarHostState = snackbarHostState,
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
@@ -114,30 +126,43 @@ fun FixedExpensesScreen(
             }
         }
     ) { padding ->
-        if (fixedExpenses.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Henüz sabit gider eklenmedi.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                MonthSelector(
+                    selectedMonth = selectedMonth,
+                    onMonthChange = { viewModel.previousMonth() },
+                    onNextMonth = { viewModel.nextMonth() },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(fixedExpenses) { expense ->
-                    FixedExpenseRow(
-                        expense = expense,
-                        onEdit = {
-                            editingExpense = expense
-                            showDialog = true
-                        },
-                        onDelete = { viewModel.deleteFixedExpense(expense) },
-                        onMarkAsPaid = { viewModel.markAsPaid(expense) }
+            if (fixedExpenses.isEmpty()) {
+                item {
+                    EmptyState(
+                        icon = Icons.Default.EventRepeat,
+                        title = "Henüz sabit gider yok",
+                        message = "Kira, aidat gibi her ay tekrarlayan ödemeleri ekle; plana ve nakit akışına girer."
                     )
                 }
+            }
+            if (toProcess.isNotEmpty()) {
+                item { FinanceSectionHeader(title = "Bu ay işlenecek", subtitle = "${toProcess.size} kalem · ${MoneyFormatter.format(toProcess.sumOf { it.amount })}") }
+                items(toProcess, key = { it.id }) { FixedItem(it) }
+            }
+            if (processed.isNotEmpty()) {
+                item { FinanceSectionHeader(title = "Bu ay işlendi", subtitle = "${processed.size} kalem") }
+                items(processed, key = { it.id }) { FixedItem(it) }
+            }
+            if (others.isNotEmpty()) {
+                item {
+                    TextButton(onClick = { showOthers = !showOthers }) {
+                        Text("Bu ay geçerli olmayanlar (${others.size}) " + if (showOthers) "▲" else "▼")
+                    }
+                }
+                if (showOthers) items(others, key = { it.id }) { FixedItem(it) }
             }
         }
 
@@ -159,6 +184,8 @@ fun FixedExpensesScreen(
 @Composable
 private fun FixedExpenseRow(
     expense: FixedExpense,
+    isProcessed: Boolean,
+    applies: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onMarkAsPaid: () -> Unit
@@ -198,11 +225,16 @@ private fun FixedExpenseRow(
                     Icon(Icons.Default.Delete, contentDescription = "Sil")
                 }
             }
-            Button(
-                onClick = onMarkAsPaid,
-                modifier = Modifier.align(Alignment.End)
-            ) {
-                Text("Harcamalara işle")
+            when {
+                isProcessed -> Text(
+                    "✓ Bu ay harcamalara işlendi",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.align(Alignment.End)
+                )
+                applies -> Button(onClick = onMarkAsPaid, modifier = Modifier.align(Alignment.End)) {
+                    Text("Harcamalara işle")
+                }
             }
         }
     }
@@ -289,18 +321,8 @@ private fun FixedExpenseDialog(
                     label = { Text("Ödeme Günü (1-31)") },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = startMonthText,
-                    onValueChange = { startMonthText = it },
-                    label = { Text("Başlangıç Ayı (YYYY-MM)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = endMonthText,
-                    onValueChange = { endMonthText = it },
-                    label = { Text("Bitiş Ayı (Opsiyonel)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                MonthField(label = "Başlangıç ayı", value = runCatching { java.time.YearMonth.parse(startMonthText) }.getOrNull(), onChange = { startMonthText = it?.toString().orEmpty() }, modifier = Modifier.fillMaxWidth())
+                MonthField(label = "Bitiş ayı (isteğe bağlı)", value = endMonth, onChange = { endMonthText = it?.toString().orEmpty() }, allowClear = true, modifier = Modifier.fillMaxWidth())
                 ExposedDropdownMenuBox(
                     expanded = categoryExpanded,
                     onExpandedChange = { categoryExpanded = !categoryExpanded }

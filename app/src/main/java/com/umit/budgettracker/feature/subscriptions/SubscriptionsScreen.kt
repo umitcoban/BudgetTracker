@@ -1,5 +1,13 @@
 package com.umit.budgettracker.feature.subscriptions
 
+import com.umit.budgettracker.core.ui.components.DateField
+import com.umit.budgettracker.core.ui.components.MonthField
+import com.umit.budgettracker.core.domain.model.SubscriptionMonthlyPayment
+import androidx.compose.material.icons.filled.Subscriptions
+import com.umit.budgettracker.core.ui.components.ScreenContentPadding
+import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
+import com.umit.budgettracker.core.ui.components.EmptyState
+import com.umit.budgettracker.core.ui.components.DetailScaffold
 import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -48,60 +56,65 @@ fun SubscriptionsScreen(
         viewModel.message.collect { snackbarHostState.showSnackbar(it) }
     }
 
-    Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text("Abonelikler") },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
-                        }
-                    }
-                )
-                MonthSelector(
-                    selectedMonth = selectedMonth,
-                    onMonthChange = { viewModel.previousMonth() },
-                    onNextMonth = { viewModel.nextMonth() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
-                )
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+    val toProcess = monthlyPayments.filter { !it.isPaid }
+    val processed = monthlyPayments.filter { it.isPaid }
+
+    @Composable
+    fun PaymentItem(payment: SubscriptionMonthlyPayment) = SubscriptionPaymentRow(
+        payment = payment,
+        selectedMonth = selectedMonth,
+        onMarkPaid = { viewModel.markAsPaid(payment) },
+        onEdit = {
+            editingSub = allSubscriptions.find { it.id == payment.subscriptionId }
+            currentEditAmount = payment.originalAmount ?: payment.amount
+            showDialog = true
+        }
+    )
+
+    DetailScaffold(
+        title = "Abonelikler",
+        subtitle = "Aylık ödemeler ve fiyat geçmişi",
+        onBack = onBack,
+        snackbarHostState = snackbarHostState,
         floatingActionButton = {
-            FloatingActionButton(onClick = { 
+            FloatingActionButton(onClick = {
                 editingSub = null
                 currentEditAmount = null
-                showDialog = true 
+                showDialog = true
             }) {
                 Icon(Icons.Default.Add, contentDescription = "Ekle")
             }
         }
     ) { padding ->
-        if (monthlyPayments.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text(text = "Bu ay için abonelik ödemesi yok.")
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = ScreenContentPadding,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                MonthSelector(
+                    selectedMonth = selectedMonth,
+                    onMonthChange = { viewModel.previousMonth() },
+                    onNextMonth = { viewModel.nextMonth() },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(monthlyPayments) { payment ->
-                    SubscriptionPaymentRow(
-                        payment = payment,
-                        selectedMonth = selectedMonth,
-                        onMarkPaid = { viewModel.markAsPaid(payment) },
-                        onEdit = {
-                            editingSub = allSubscriptions.find { it.id == payment.subscriptionId }
-                            currentEditAmount = payment.originalAmount ?: payment.amount
-                            showDialog = true
-                        }
+            if (monthlyPayments.isEmpty()) {
+                item {
+                    EmptyState(
+                        icon = Icons.Default.Subscriptions,
+                        title = "Bu ay abonelik ödemesi yok",
+                        message = "Aboneliklerini ekle; ödeme günü gelince harcamalara kendiliğinden işlenir."
                     )
                 }
+            }
+            if (toProcess.isNotEmpty()) {
+                item { FinanceSectionHeader(title = "Bu ay ödenecek", subtitle = "${toProcess.size} abonelik · ${MoneyFormatter.format(toProcess.sumOf { it.amount })}") }
+                items(toProcess, key = { it.subscriptionId }) { PaymentItem(it) }
+            }
+            if (processed.isNotEmpty()) {
+                item { FinanceSectionHeader(title = "Harcamalara işlendi", subtitle = "${processed.size} abonelik · ${MoneyFormatter.format(processed.sumOf { it.amount })}") }
+                items(processed, key = { it.subscriptionId }) { PaymentItem(it) }
             }
         }
 
@@ -429,14 +442,7 @@ fun SubscriptionDialog(
                     }
                 }
                 item {
-                    OutlinedTextField(
-                        value = effectiveMonthText,
-                        onValueChange = { effectiveMonthText = it },
-                        label = { Text("Fiyatın Başladığı Ay (YYYY-MM)") },
-                        isError = priceChanged && month == null,
-                        supportingText = { if (priceChanged && month == null) Text("Fiyat değişikliği için geçerli ay seçilmelidir.") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    MonthField(label = "Fiyatın başladığı ay", value = runCatching { java.time.YearMonth.parse(effectiveMonthText) }.getOrNull(), onChange = { effectiveMonthText = it?.toString().orEmpty() }, modifier = Modifier.fillMaxWidth())
                 }
                 item {
                     OutlinedTextField(

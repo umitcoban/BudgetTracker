@@ -302,7 +302,6 @@ fun ExpenseRow(
                     text = "${expense.category?.name ?: "Kategorisiz"} • ${expense.account?.name ?: "Hesapsız"}",
                     style = MaterialTheme.typography.bodySmall
                 )
-                Text(text = expense.expenseDate.toString(), style = MaterialTheme.typography.bodySmall)
                 if (expense.originalCurrency != null && expense.originalAmount != null) {
                     Text(
                         text = "${expense.originalAmount.formatMinor()} ${expense.originalCurrency} • ${MoneyFormatter.format(expense.amount)}",
@@ -404,7 +403,7 @@ private fun ExpenseMonthSummary(
             verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             Text(
-                if (isFiltered) "Filtrelenen toplam" else "Bu ay toplam harcama",
+                if (isFiltered) "Filtrelenen toplam" else "Bu ay yapılan harcama",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -418,6 +417,15 @@ private fun ExpenseMonthSummary(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (!isFiltered) {
+                // Özet counts card purchases in the month their statement is paid, so its total
+                // differs from this one; say so where the two numbers meet.
+                Text(
+                    "Kartla yapılanlar Özet'te ekstrenin ödendiği aya sayılır.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

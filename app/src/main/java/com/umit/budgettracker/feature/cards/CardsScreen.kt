@@ -1,5 +1,7 @@
 package com.umit.budgettracker.feature.cards
 
+import com.umit.budgettracker.core.ui.components.DateField
+import com.umit.budgettracker.core.ui.components.MonthField
 import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -480,12 +482,7 @@ private fun StatementDatesDialog(
                     },
                     style = MaterialTheme.typography.bodySmall
                 )
-                OutlinedTextField(
-                    effectiveMonth,
-                    { effectiveMonth = it },
-                    label = { Text("Geçerlilik ayı (YYYY-MM)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                MonthField(label = "Geçerlilik ayı", value = runCatching { java.time.YearMonth.parse(effectiveMonth) }.getOrNull(), onChange = { effectiveMonth = it?.toString().orEmpty() }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     statementDay,
                     { statementDay = it },

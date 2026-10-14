@@ -66,7 +66,7 @@ feature/*/XxxScreen.kt          Compose, presentation only, collects StateFlow
 ### Navigation
 
 - Routes are `Screen` sealed-class objects in `core/navigation/Screen.kt` (route + Turkish title + icon); `bottomNavItems` selects the five tab destinations. `NavGraph.kt` maps each `Screen` to a composable. `MainActivity` shows the bottom bar only when the current route is in `bottomNavItems`.
-- Use `navigateToTopLevelDestination` / `navigateBackToDashboard` / `popBackStackOrDashboard` from `NavigationExtensions.kt` rather than raw `navigate` / `popBackStack` for tab and back moves; screens reachable from the hub, widget or notifications use `popBackStackOrDashboard` so "Geri" never leaves the app from a deep link.
+- Use `navigateToTopLevelDestination` / `popBackStackOrDashboard` from `NavigationExtensions.kt` rather than raw `navigate` / `popBackStack` for tab and back moves; screens reachable from the hub, widget or notifications use `popBackStackOrDashboard` so "Geri" never leaves the app from a deep link.
 - The fifth tab (route `settings`, title "Menü") is a hub of feature tiles plus record management, Tercihler and backup. New tools get a tile there.
 
 ### Other notable pieces

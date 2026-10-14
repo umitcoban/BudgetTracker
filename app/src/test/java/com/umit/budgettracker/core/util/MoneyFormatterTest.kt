@@ -21,5 +21,10 @@ class MoneyFormatterTest {
         assertEquals(10000000L, MoneyFormatter.parse("100000"))
         assertEquals(10000050L, MoneyFormatter.parse("100000,50"))
         assertEquals(10000050L, MoneyFormatter.parse("100000.50"))
+        // Exact, no floating point: these used to come out one kuruş short or 1000× too small.
+        assertEquals(1999L, MoneyFormatter.parse("19,99"))
+        assertEquals(29L, MoneyFormatter.parse("0,29"))
+        assertEquals(125000L, MoneyFormatter.parse("1.250"))
+        assertEquals(125050L, MoneyFormatter.parse("1.250,50"))
     }
 }

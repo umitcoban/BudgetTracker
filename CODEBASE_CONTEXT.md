@@ -425,6 +425,10 @@ Rules:
 
 Percentages are integer arithmetic. Upcoming-payment rules only apply when the selected month is the current calendar month. Detection lives in `AnomalyRules`; the Dashboard shows the first non-positive warning with a "+N uyarı daha" expander and uses a positive trend as the good-news insight.
 
+## Planned Payment Month Rule
+
+Planned subscription, loan and fixed-expense payments count in the month their money leaves, like card purchases: a card-paid item is due with the statement that covers its billing day (`planningMonthFor`), other accounts in the billing month. A month's planned items therefore come from the calendar months `[month − MAX_PLANNING_MONTH_SHIFT, month]` whose payment lands in it. Whether an item is already processed is decided in its own calendar month (where its linked expense is dated), so processing a card-paid item moves it from "planned" to the next statement's card spending without counting it twice or hiding the following month's bill (fixed 2026-10).
+
 ## Monthly Summary Batching Rule
 
 `MonthlyBudgetCalculator.getSummariesForMonths(months)` is the only path that opens database flows; `getSummaryForMonth` wraps it. Screens that need several months (Reports, Dashboard history, PDF) must pass the whole list rather than combining single-month calls. The calculator loads expenses for `[min(months) − 3 baseline months − 2 planning-shift months, max(months)]`; `MAX_PLANNING_MONTH_SHIFT` must be kept in step with the credit-card planning-month logic.
@@ -702,7 +706,7 @@ Rules:
 
 - A category with spending and no budget must still appear in Dashboard and Reports.
 - A category with a budget but no spending must also remain visible with a zero amount.
-- Credit-card expenses must use their planning/payment month, consistent with the rest of the monthly summary.
+- Category amounts (and category budgets) use the **calendar month of the purchase**, also for credit-card expenses: a budget answers "what did I spend this month". Totals, the card payment and "Plan sonrası kullanılabilir" keep using the payment month (decision 2026-10).
 - Refund adjustments must reduce the displayed category amount; the amount must not drop below zero.
 - When a category budget exists, show both the spending amount and the budget usage percentage.
 

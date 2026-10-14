@@ -1,5 +1,7 @@
 package com.umit.budgettracker.feature.budgets
 
+import androidx.compose.material.icons.filled.PieChart
+import com.umit.budgettracker.core.ui.components.*
 import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -34,86 +36,94 @@ fun CategoryBudgetsScreen(
     var showDialog by remember { mutableStateOf(false) }
     var selectedBudget by remember { mutableStateOf<CategoryBudget?>(null) }
 
-    Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text("Kategori Bütçeleri") },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
-                        }
-                    }
-                )
-                MonthSelector(
-                    selectedMonth = selectedMonth,
-                    onMonthChange = { viewModel.previousMonth() },
-                    onNextMonth = { viewModel.nextMonth() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
-                )
-            }
-        },
+    var deleting by remember { mutableStateOf<CategoryBudget?>(null) }
+
+    DetailScaffold(
+        title = "Kategori Bütçeleri",
+        subtitle = "Aylık harcama limitleri · harcama günü esas",
+        onBack = onBack,
         floatingActionButton = {
-            FloatingActionButton(onClick = { 
+            FloatingActionButton(onClick = {
                 selectedBudget = null
-                showDialog = true 
+                showDialog = true
             }) {
                 Icon(Icons.Default.Add, contentDescription = "Ekle")
             }
         }
     ) { padding ->
-        when (val state = uiState) {
-            is CategoryBudgetsUiState.Loading -> {
-                Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = ScreenContentPadding,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                MonthSelector(
+                    selectedMonth = selectedMonth,
+                    onMonthChange = { viewModel.previousMonth() },
+                    onNextMonth = { viewModel.nextMonth() },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
-            is CategoryBudgetsUiState.Success -> {
-                if (state.budgets.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                        Text(text = "Bu ay için bütçe tanımlanmamış.")
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize().padding(padding),
-                        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(state.budgets) { budget ->
-                            val spent = state.summary.categorySummaries.find { it.categoryId == budget.categoryId }?.amount ?: 0L
-                            BudgetRow(
-                                budget = budget, 
-                                spent = spent,
-                                onClick = {
-                                    selectedBudget = budget
-                                    showDialog = true
-                                }
+            when (val state = uiState) {
+                is CategoryBudgetsUiState.Loading -> item {
+                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                }
+                is CategoryBudgetsUiState.Success -> {
+                    if (state.budgets.isEmpty()) {
+                        item {
+                            EmptyState(
+                                icon = Icons.Default.PieChart,
+                                title = "Bu ay bütçe yok",
+                                message = "Kategorilere aylık limit koy; aşınca ve %80'e gelince uyarırım.",
+                                actionLabel = "Geçen ayınkini kopyala",
+                                onAction = viewModel::copyFromPreviousMonth
                             )
                         }
                     }
-                }
-                
-                if (showDialog) {
-                    val budgetedCategoryIds = state.budgets
-                        .map { it.categoryId }
-                        .filter { it != selectedBudget?.categoryId }
-                        .toSet()
-                    CategoryBudgetDialog(
-                        existingBudget = selectedBudget,
-                        onDismiss = { showDialog = false },
-                        onConfirm = { catId, amount ->
-                            viewModel.saveBudget(selectedBudget, catId, amount, selectedMonth)
-                            showDialog = false
-                        },
-                        categories = state.categories
-                            .filter { it.type == CategoryType.EXPENSE || it.type == CategoryType.SYSTEM }
-                            .filter { it.id !in budgetedCategoryIds }
-                    )
+                    items(state.budgets, key = { it.id }) { budget ->
+                        val spent = state.summary.categorySummaries.find { it.categoryId == budget.categoryId }?.amount ?: 0L
+                        BudgetRow(
+                            budget = budget,
+                            spent = spent,
+                            onClick = {
+                                selectedBudget = budget
+                                showDialog = true
+                            }
+                        )
+                    }
                 }
             }
         }
+    }
+
+    val state = uiState
+    if (showDialog && state is CategoryBudgetsUiState.Success) {
+        val budgetedCategoryIds = state.budgets
+            .map { it.categoryId }
+            .filter { it != selectedBudget?.categoryId }
+            .toSet()
+        CategoryBudgetDialog(
+            existingBudget = selectedBudget,
+            onDismiss = { showDialog = false },
+            onConfirm = { catId, amount ->
+                viewModel.saveBudget(selectedBudget, catId, amount, selectedMonth)
+                showDialog = false
+            },
+            onDelete = selectedBudget?.let { budget -> { deleting = budget; showDialog = false } },
+            categories = state.categories
+                .filter { it.type == CategoryType.EXPENSE || it.type == CategoryType.SYSTEM }
+                .filter { it.id !in budgetedCategoryIds }
+        )
+    }
+    deleting?.let { budget ->
+        ConfirmDialog(
+            title = "Bütçeyi sil",
+            message = "${budget.category?.name ?: "Bu kategori"} için bu ayın limiti silinecek.",
+            confirmLabel = "Sil",
+            destructive = true,
+            onConfirm = { viewModel.deleteBudget(budget); deleting = null },
+            onDismiss = { deleting = null }
+        )
     }
 }
 
@@ -146,70 +156,30 @@ fun BudgetRow(budget: CategoryBudget, spent: Long, onClick: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryBudgetDialog(
     existingBudget: CategoryBudget?,
     onDismiss: () -> Unit,
     onConfirm: (Long, Long) -> Unit,
+    onDelete: (() -> Unit)?,
     categories: List<Category>
 ) {
-    var amountText by remember { mutableStateOf(existingBudget?.let { (it.limitAmount / 100).toString() } ?: "") }
-    var selectedCategory by remember { mutableStateOf(existingBudget?.category ?: categories.firstOrNull()) }
-    var expanded by remember { mutableStateOf(false) }
+    var amountText by remember { mutableStateOf(MoneyInput.format(existingBudget?.limitAmount)) }
+    var selectedCategory by remember { mutableStateOf(categories.firstOrNull { it.id == existingBudget?.categoryId } ?: categories.firstOrNull()) }
+    val amount = MoneyInput.parse(amountText)
 
-    AppAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (existingBudget != null) "Bütçeyi Düzenle" else "Yeni Bütçe") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (categories.isEmpty()) {
-                    Text(text = "Aktif kategori bulunamadı.", color = MaterialTheme.colorScheme.error)
-                } else {
-                    OutlinedTextField(
-                        value = amountText, 
-                        onValueChange = { amountText = it }, 
-                        label = { Text("Limit (TL)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = !expanded }
-                    ) {
-                        OutlinedTextField(
-                            value = selectedCategory?.name ?: "Kategori Seçin",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Kategori") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            categories.forEach { category ->
-                                DropdownMenuItem(
-                                    text = { Text(category.name) },
-                                    onClick = {
-                                        selectedCategory = category
-                                        expanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            val amount = MoneyFormatter.parse(amountText) ?: 0L
-            TextButton(
-                enabled = amount > 0 && selectedCategory != null,
-                onClick = { onConfirm(selectedCategory!!.id, amount) }
-            ) { Text("Kaydet") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } }
-    )
+    FormDialog(
+        title = if (existingBudget != null) "Bütçeyi düzenle" else "Yeni bütçe",
+        onDismiss = onDismiss,
+        confirmEnabled = (amount ?: 0L) > 0L && selectedCategory != null,
+        onConfirm = { onConfirm(selectedCategory!!.id, amount!!) },
+        extraAction = onDelete?.let { { TextButton(onClick = it) { Text("Sil", color = MaterialTheme.colorScheme.error) } } }
+    ) {
+        if (categories.isEmpty()) {
+            Text(text = "Bütçe konmamış aktif kategori kalmadı.", color = MaterialTheme.colorScheme.error)
+        } else {
+            DropdownField(label = "Kategori", options = categories, selected = selectedCategory, onSelect = { selectedCategory = it }, optionLabel = { it.name })
+            AmountField(value = amountText, onValueChange = { amountText = it }, label = "Aylık limit", modifier = Modifier.fillMaxWidth())
+        }
+    }
 }

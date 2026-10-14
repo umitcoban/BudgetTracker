@@ -1,5 +1,7 @@
 package com.umit.budgettracker.feature.salary
 
+import com.umit.budgettracker.core.ui.components.DateField
+import com.umit.budgettracker.core.ui.components.MonthField
 import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -173,7 +175,7 @@ fun SalaryRuleDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = amountText, onValueChange = { amountText = it }, label = { Text("Miktar (TL)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = monthText, onValueChange = { monthText = it }, label = { Text("Geçerli olacağı ay (YYYY-MM)") }, modifier = Modifier.fillMaxWidth())
+                MonthField(label = "Geçerli olacağı ay", value = runCatching { java.time.YearMonth.parse(monthText) }.getOrNull(), onChange = { monthText = it?.toString().orEmpty() }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = payDayText,
                     onValueChange = { payDayText = it },

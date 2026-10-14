@@ -13,13 +13,9 @@ object MoneyFormatter {
         return currencyFormat.format(amountKurus / 100.0)
     }
 
-    fun parse(input: String): Long? {
-        if (input.isBlank()) return null
-        return try {
-            val cleanedInput = input.replace("[^0-9,.]".toRegex(), "").replace(",", ".")
-            (cleanedInput.toDouble() * 100).toLong()
-        } catch (e: Exception) {
-            null
-        }
-    }
+    /**
+     * Typed TRY text → kuruş, exactly: "19,99", "1.250", "1.250,50" and "100000.50" all work.
+     * Parsing used to go through Double, which stored 19,99 as 19,98 and 1.250 as 1,25.
+     */
+    fun parse(input: String): Long? = com.umit.budgettracker.core.parsing.TurkishNumbers.parseMinor(input)
 }

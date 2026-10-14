@@ -572,22 +572,27 @@ private fun TrendChartCard(trend: List<MonthlyTrendPoint>) {
                     .pointerInput(trend) {
                         detectTapGestures { tap ->
                             if (trend.size < 2) return@detectTapGestures
-                            val stepX = size.width / (trend.size - 1)
-                            val index = ((tap.x + stepX / 2f) / stepX).toInt().coerceIn(0, trend.lastIndex)
+                            val inset = MarkerInset.toPx()
+                            val stepX = (size.width - 2 * inset) / (trend.size - 1)
+                            val index = ((tap.x - inset + stepX / 2f) / stepX).toInt().coerceIn(0, trend.lastIndex)
                             selected = index.takeIf { it != selected }
                         }
                     }
             ) {
                 if (trend.size < 2) return@Canvas
-                val stepX = size.width / (trend.size - 1)
+                // Inset by a marker's size so the highest point and the first/last months are not
+                // cut in half at the canvas edge.
+                val inset = MarkerInset.toPx()
+                val stepX = (size.width - 2 * inset) / (trend.size - 1)
                 val usableHeight = size.height - 12.dp.toPx()
 
-                fun yFor(amount: Long): Float = usableHeight - (amount.toFloat() / maxAmount.toFloat() * usableHeight)
+                fun xFor(index: Int): Float = inset + stepX * index
+                fun yFor(amount: Long): Float = usableHeight - (amount.toFloat() / maxAmount.toFloat() * (usableHeight - inset))
 
                 fun buildPath(amount: (MonthlyTrendPoint) -> Long): Path {
                     val path = Path()
                     trend.forEachIndexed { index, point ->
-                        val x = stepX * index
+                        val x = xFor(index)
                         val y = yFor(amount(point))
                         if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
                     }
@@ -601,7 +606,7 @@ private fun TrendChartCard(trend: List<MonthlyTrendPoint>) {
                     strokeWidth = 1.dp.toPx()
                 )
                 selected?.let { index ->
-                    val x = stepX * index
+                    val x = xFor(index)
                     drawLine(crosshairColor, Offset(x, 0f), Offset(x, usableHeight), strokeWidth = 1.dp.toPx())
                 }
                 drawPath(
@@ -615,7 +620,7 @@ private fun TrendChartCard(trend: List<MonthlyTrendPoint>) {
                     style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
                 )
                 trend.forEachIndexed { index, point ->
-                    val x = stepX * index
+                    val x = xFor(index)
                     val isSelected = index == selected
                     val radius = if (isSelected) 5.dp.toPx() else 4.dp.toPx()
                     // 2dp surface ring so overlapping markers stay separable
@@ -924,3 +929,5 @@ private fun CategoryReportRow(
         }
     }
 }
+
+private val MarkerInset = 8.dp
