@@ -439,7 +439,7 @@ The cash-flow calendar lists cash movements, not accounting entries:
 
 - Salary is an inflow on the rule's `payDay` (day 1 when unset) and one-off incomes on their dates.
 - Expenses paid from cash/bank accounts are outflows on their dates; credit-card purchases are **not** listed — the card's statement payment on its due date is the outflow.
-- Planned subscription, loan and fixed-expense payments appear on their days until processed.
+- Planned subscription, loan and fixed-expense payments appear until processed: on their billing day when paid from cash/bank, on the **statement due date** of the statement that pays them when card-paid (same `planningMonthFor` rule as the monthly summary, so a card-paid item can come from one of the two previous calendar months).
 
 ## Assets and Valuation Rule
 

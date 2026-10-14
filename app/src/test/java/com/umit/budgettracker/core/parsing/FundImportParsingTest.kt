@@ -151,6 +151,17 @@ class FundScreenshotTest {
     }
 
     @Test
+    fun parse_repairsAMangledCodeAgainstKnownFunds() {
+        val line = "IH-İSTANBUL PORTFÖY  40  40  1.200,00 TL  1.200,00 TL  -10,00 TL  30,000000 TL"
+        assertTrue(FundPortfolioParser.parse(line).rows.isEmpty())
+        val repaired = FundPortfolioParser.parse(line, knownCodes = setOf("IIH", "GTA")).rows.single()
+        assertEquals("IIH", repaired.code)
+        assertEquals(40_000_000L, repaired.quantity)
+        // Ambiguous: two known codes one letter away — left for the user.
+        assertTrue(FundPortfolioParser.parse(line, knownCodes = setOf("IIH", "IHH")).rows.isEmpty())
+    }
+
+    @Test
     fun anchoredRows_ignoreTitleWrapsThatLookLikeCodes() {
         assertFalse(OcrLayout.isFundAnchor("PIY (TL) FONU"))
         assertFalse(OcrLayout.isFundAnchor("SEN. F"))

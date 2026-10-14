@@ -61,14 +61,21 @@ class CashFlowProjector @Inject constructor(
         ) { incomes, expenses, statementWindowExpenses, adjustments, rules ->
             ActualInputs(incomes, expenses, statementWindowExpenses, adjustments, rules)
         }
+        // Card-paid planned items of the two previous months can be paid with this month's statement.
+        val sources = (STATEMENT_LOOKBACK_MONTHS downTo 0L).map { month.minusMonths(it) }
+        val plannedSourcesFlow = combine(sources.map { source ->
+            combine(
+                subscriptionCalculator.getPaymentsForMonth(source),
+                loanCalculator.getPaymentsForMonth(source),
+                fixedExpenseCalculator.getPaymentsForMonth(source)
+            ) { subscriptions, loans, fixedExpenses -> PlannedSource(source, subscriptions, loans, fixedExpenses) }
+        }) { it.toList() }
         val plannedFlow = combine(
             accountRepository.observeActiveAccounts(),
-            subscriptionCalculator.getPaymentsForMonth(month),
-            loanCalculator.getPaymentsForMonth(month),
-            fixedExpenseCalculator.getPaymentsForMonth(month),
+            plannedSourcesFlow,
             salaryRepository.observeSalaryForMonth(month)
-        ) { accounts, subscriptions, loans, fixedExpenses, salaryRule ->
-            PlannedInputs(accounts, subscriptions, loans, fixedExpenses, salaryRule)
+        ) { accounts, plannedSources, salaryRule ->
+            PlannedInputs(accounts, plannedSources, salaryRule)
         }
         val extraFlow = combine(
             plannedExpenseRepository.observeAll(),
@@ -155,43 +162,61 @@ class CashFlowProjector @Inject constructor(
             }
         }
 
-        planned.subscriptions.filter { !it.isPaid }.forEach { sub ->
-            list += CashFlowEvent(
-                date = month.atDay(sub.billingDay.coerceAtMost(month.lengthOfMonth())),
-                title = sub.title,
-                amount = sub.amount,
-                type = CashFlowEventType.SUBSCRIPTION,
-                sourceId = sub.subscriptionId,
-                description = sub.originalCurrency?.let { currency ->
-                    "${sub.originalAmount?.let { formatMinor(it) } ?: ""} $currency · güncel kurla"
-                }
-            )
+        // Planned payments appear when their money leaves: on the billing day for cash/bank
+        // accounts, on the statement due date for card-paid ones (same rule as the monthly summary).
+        fun placement(source: YearMonth, day: Int, account: PaymentAccount?): Pair<LocalDate, String?>? {
+            val billingDate = source.atDay(day.coerceIn(1, source.lengthOfMonth()))
+            if (account == null || account.type != AccountType.CREDIT_CARD) {
+                return if (source == month) billingDate to null else null
+            }
+            if (planningMonthFor(billingDate, account, actual.statementRules) != month) return null
+            val dueDay = actual.statementRules.effectiveFor(account.id, month)?.dueDay ?: account.dueDay ?: day
+            return month.atDay(dueDay.coerceIn(1, month.lengthOfMonth())) to "${account.name} ekstresiyle ödenir"
         }
 
-        planned.loans.forEach { loan ->
-            list += CashFlowEvent(
-                date = month.atDay(loan.paymentDay.coerceAtMost(month.lengthOfMonth())),
-                title = loan.title,
-                amount = loan.amount,
-                type = CashFlowEventType.LOAN,
-                sourceId = loan.loanId,
-                description = "${loan.currentInstallment}/${loan.totalInstallments}"
-            )
-        }
+        planned.sources.forEach { source ->
+            source.subscriptions.filter { !it.isPaid }.forEach { sub ->
+                val (date, cardNote) = placement(source.month, sub.billingDay, sub.account) ?: return@forEach
+                list += CashFlowEvent(
+                    date = date,
+                    title = sub.title,
+                    amount = sub.amount,
+                    type = CashFlowEventType.SUBSCRIPTION,
+                    sourceId = sub.subscriptionId,
+                    description = listOfNotNull(
+                        sub.originalCurrency?.let { currency -> "${sub.originalAmount?.let { formatMinor(it) } ?: ""} $currency · güncel kurla" },
+                        cardNote
+                    ).joinToString(" · ").ifEmpty { null }
+                )
+            }
 
-        val paidFixedExpenseIds = actual.expenses
-            .filter { YearMonth.from(it.expenseDate) == month }
-            .mapNotNull { it.fixedExpenseId }
-            .toSet()
-        planned.fixedExpenses.filter { it.fixedExpenseId !in paidFixedExpenseIds }.forEach { fixedExpense ->
-            list += CashFlowEvent(
-                date = month.atDay(fixedExpense.dayOfMonth.coerceAtMost(month.lengthOfMonth())),
-                title = fixedExpense.title,
-                amount = fixedExpense.amount,
-                type = CashFlowEventType.FIXED_EXPENSE,
-                sourceId = fixedExpense.fixedExpenseId,
-                description = "Sabit gider"
-            )
+            source.loans.forEach { loan ->
+                val (date, cardNote) = placement(source.month, loan.paymentDay, loan.account) ?: return@forEach
+                list += CashFlowEvent(
+                    date = date,
+                    title = loan.title,
+                    amount = loan.amount,
+                    type = CashFlowEventType.LOAN,
+                    sourceId = loan.loanId,
+                    description = listOfNotNull("${loan.currentInstallment}/${loan.totalInstallments}", cardNote).joinToString(" · ")
+                )
+            }
+
+            val processedFixedIds = actual.statementWindowExpenses
+                .filter { YearMonth.from(it.expenseDate) == source.month }
+                .mapNotNull { it.fixedExpenseId }
+                .toSet()
+            source.fixedExpenses.filter { it.fixedExpenseId !in processedFixedIds }.forEach { fixedExpense ->
+                val (date, cardNote) = placement(source.month, fixedExpense.dayOfMonth, fixedExpense.account) ?: return@forEach
+                list += CashFlowEvent(
+                    date = date,
+                    title = fixedExpense.title,
+                    amount = fixedExpense.amount,
+                    type = CashFlowEventType.FIXED_EXPENSE,
+                    sourceId = fixedExpense.fixedExpenseId,
+                    description = cardNote ?: "Sabit gider"
+                )
+            }
         }
 
         plannedExpenses
@@ -228,10 +253,16 @@ class CashFlowProjector @Inject constructor(
 
     private data class PlannedInputs(
         val accounts: List<PaymentAccount>,
+        val sources: List<PlannedSource>,
+        val salaryRule: SalaryRule?
+    )
+
+    /** Planned payments of one calendar month, before placing them on the day money leaves. */
+    private data class PlannedSource(
+        val month: YearMonth,
         val subscriptions: List<SubscriptionMonthlyPayment>,
         val loans: List<LoanMonthlyPayment>,
-        val fixedExpenses: List<FixedExpenseMonthlyPayment>,
-        val salaryRule: SalaryRule?
+        val fixedExpenses: List<FixedExpenseMonthlyPayment>
     )
 
     private companion object {

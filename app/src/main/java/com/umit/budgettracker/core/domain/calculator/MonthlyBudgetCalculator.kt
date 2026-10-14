@@ -328,7 +328,7 @@ private fun Expense.planningMonth(statementRules: List<CreditCardStatementRule>)
     if (paymentSourceType != AccountType.CREDIT_CARD) YearMonth.from(expenseDate) else planningMonthFor(expenseDate, account, statementRules)
 
 /** Month whose card statement pays a charge on [expenseDate]; the calendar month for other accounts. */
-private fun planningMonthFor(
+internal fun planningMonthFor(
     expenseDate: LocalDate,
     account: PaymentAccount?,
     statementRules: List<CreditCardStatementRule>
@@ -354,7 +354,7 @@ private fun planningMonthFor(
     }
 }
 
-private fun List<CreditCardStatementRule>.effectiveFor(
+internal fun List<CreditCardStatementRule>.effectiveFor(
     accountId: Long,
     month: YearMonth
 ): CreditCardStatementRule? {

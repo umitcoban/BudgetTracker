@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.expense
 
+import com.umit.budgettracker.core.ui.components.AmountField
 import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import com.umit.budgettracker.core.ui.components.AppDatePickerDialog
 import android.graphics.BitmapFactory
@@ -253,8 +254,8 @@ private fun ExpenseFilterDialog(
                         }
                     }
                 }
-                OutlinedTextField(minimumText, { minimumText = it }, label = { Text("En düşük tutar (TL)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(maximumText, { maximumText = it }, label = { Text("En yüksek tutar (TL)") }, modifier = Modifier.fillMaxWidth())
+                AmountField(value = minimumText, onValueChange = { minimumText = it }, label = "En düşük tutar", modifier = Modifier.fillMaxWidth())
+                AmountField(value = maximumText, onValueChange = { maximumText = it }, label = "En yüksek tutar", modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = {
@@ -990,12 +991,7 @@ private fun AddRefundDialog(
                     text = "Kalan iade edilebilir tutar: ${MoneyFormatter.format(remainingAmount)}",
                     style = MaterialTheme.typography.bodySmall
                 )
-                OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = it },
-                    label = { Text("İade Tutarı (TL)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                AmountField(value = amountText, onValueChange = { amountText = it }, label = "İade tutarı", modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },

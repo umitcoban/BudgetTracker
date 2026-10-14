@@ -46,7 +46,12 @@ object FundPortfolioParser {
     private val bareSixDecimals = Regex("""\d{7,9}""")
     private val tolerance = BigDecimal("0.005")
 
-    fun parse(text: String): FundParseResult {
+    /**
+     * [knownCodes] are funds the user already holds or has prices for. OCR sometimes drops or
+     * doubles a letter of the code ("IIH-İSTANBUL" → "IH-İSTANBUL"); a row whose code is one
+     * letter away from exactly one known code is read as that fund.
+     */
+    fun parse(text: String, knownCodes: Set<String> = emptySet()): FundParseResult {
         val rows = mutableListOf<ParsedFundRow>()
         val unread = mutableListOf<String>()
         val lines = text.lines().map { it.replace('\t', ' ').replace(';', ' ').trim() }.filter { it.isNotBlank() }
@@ -65,6 +70,11 @@ object FundPortfolioParser {
         }
         merged.forEach { line ->
             val code = fundCode.findAll(line).map { it.groupValues[1] }.firstOrNull { it !in headerWords }
+                ?: repairedCode(line, knownCodes)?.let { (code, raw) ->
+                    val parsed = parseRow(raw, line)?.copy(code = code)
+                    if (parsed != null) rows += parsed else unread += line
+                    return@forEach
+                }
             if (code == null) {
                 if (TurkishNumbers.tokens(line).size >= 3 && headerWords.none { line.uppercase().contains(it) }) unread += line
                 return@forEach
@@ -73,6 +83,21 @@ object FundPortfolioParser {
             if (parsed != null) rows += parsed else unread += line
         }
         return FundParseResult(rows.distinctBy { it.code }, unread)
+    }
+
+    private val mangledCode = Regex("""^\s*([A-Z]{2,4})\s*[-–—]""")
+
+    /** (known code, code as written) when the row's code is one edit away from a single known code. */
+    private fun repairedCode(line: String, knownCodes: Set<String>): Pair<String, String>? {
+        val raw = mangledCode.find(line)?.groupValues?.get(1) ?: return null
+        return knownCodes.filter { isOneEditAway(raw, it) }.singleOrNull()?.let { it to raw }
+    }
+
+    private fun isOneEditAway(a: String, b: String): Boolean {
+        if (a == b || kotlin.math.abs(a.length - b.length) > 1) return false
+        if (a.length == b.length) return a.indices.count { a[it] != b[it] } == 1
+        val (short, long) = if (a.length < b.length) a to b else b to a
+        return long.indices.any { long.removeRange(it, it + 1) == short }
     }
 
     private fun parseRow(code: String, line: String): ParsedFundRow? {

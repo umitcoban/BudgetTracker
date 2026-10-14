@@ -21,6 +21,7 @@ import androidx.lifecycle.viewModelScope
 import com.umit.budgettracker.core.domain.calculator.AssetValuationRules
 import com.umit.budgettracker.core.domain.calculator.FundMovementRules
 import com.umit.budgettracker.core.domain.calculator.FundPosition
+import com.umit.budgettracker.core.domain.repository.AssetRepository
 import com.umit.budgettracker.core.domain.usecase.ImportFundPortfolioUseCase
 import com.umit.budgettracker.core.ocr.DocumentTextExtractor
 import com.umit.budgettracker.core.parsing.FundMovementParser
@@ -48,8 +49,20 @@ data class FundHistorySummary(val movementCount: Int, val from: LocalDate, val t
 @HiltViewModel
 class FundImportViewModel @Inject constructor(
     private val extractor: DocumentTextExtractor,
-    private val importFunds: ImportFundPortfolioUseCase
+    private val importFunds: ImportFundPortfolioUseCase,
+    private val assetRepository: AssetRepository
 ) : ViewModel() {
+    /** Fund codes the user holds or has prices for; lets the parser repair OCR-mangled codes. */
+    private var knownCodes: Set<String> = emptySet()
+
+    init {
+        viewModelScope.launch {
+            knownCodes = (assetRepository.getAssets().mapNotNull { it.priceCode } + assetRepository.getPrices().map { it.code })
+                .filter { it.startsWith("FUND:") }
+                .map { it.removePrefix("FUND:") }
+                .toSet()
+        }
+    }
     private val _text = MutableStateFlow("")
     val text: StateFlow<String> = _text.asStateFlow()
     private val _result = MutableStateFlow<FundParseResult?>(null)
@@ -84,7 +97,7 @@ class FundImportViewModel @Inject constructor(
             return
         }
         _history.value = null
-        _result.value = FundPortfolioParser.parse(_text.value).also {
+        _result.value = FundPortfolioParser.parse(_text.value, knownCodes).also {
             if (it.rows.isEmpty()) _message.value = "Tabloda fon satırı bulunamadı. Kod, adet, fiyat ve tutar sütunlarının olduğundan emin ol."
         }
     }

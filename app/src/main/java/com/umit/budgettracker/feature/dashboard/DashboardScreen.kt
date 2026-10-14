@@ -1,5 +1,7 @@
 package com.umit.budgettracker.feature.dashboard
 
+import com.umit.budgettracker.core.ui.components.AmountField
+import com.umit.budgettracker.core.ui.components.MoneyInput
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import com.umit.budgettracker.core.ui.components.AppAlertDialog
@@ -947,19 +949,13 @@ fun SavingGoalDialog(
     onDismiss: () -> Unit,
     onConfirm: (Long) -> Unit
 ) {
-    var amountText by remember { mutableStateOf((currentAmount / 100).toString()) }
+    var amountText by remember { mutableStateOf(MoneyInput.format(currentAmount)) }
 
     AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Birikim hedefi") },
         text = {
-            OutlinedTextField(
-                value = amountText,
-                onValueChange = { amountText = it },
-                label = { Text("Hedef tutar (TL)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+            AmountField(value = amountText, onValueChange = { amountText = it }, label = "Hedef tutar", modifier = Modifier.fillMaxWidth())
         },
         confirmButton = {
             Button(onClick = {

@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.salary
 
+import com.umit.budgettracker.core.ui.components.AmountField
 import com.umit.budgettracker.core.ui.components.DetailScaffold
 import com.umit.budgettracker.core.ui.components.DateField
 import com.umit.budgettracker.core.ui.components.MonthField
@@ -159,7 +160,7 @@ fun SalaryRuleDialog(
         title = { Text(if (existingRule == null) "Maaşı Güncelle" else "Maaş Kuralını Düzenle") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = amountText, onValueChange = { amountText = it }, label = { Text("Miktar (TL)") }, modifier = Modifier.fillMaxWidth())
+                AmountField(value = amountText, onValueChange = { amountText = it }, label = "Aylık net maaş", modifier = Modifier.fillMaxWidth())
                 MonthField(label = "Geçerli olacağı ay", value = runCatching { java.time.YearMonth.parse(monthText) }.getOrNull(), onChange = { monthText = it?.toString().orEmpty() }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = payDayText,
