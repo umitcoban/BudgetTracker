@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.cashflow
 
+import com.umit.budgettracker.core.ui.components.DetailScaffold
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -83,33 +84,10 @@ fun CashFlowScreen(
         .sumOf { it.amount }
     val netFlow = totalIncome - totalOutflow
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Özete dön"
-                        )
-                    }
-                },
-                title = {
-                    Column {
-                        Text("Nakit Akışı", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "Ay içindeki para hareketleri",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        }
+    DetailScaffold(
+        title = "Nakit Akışı",
+        subtitle = "Ay içindeki para hareketleri",
+        onBack = onBack,
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
