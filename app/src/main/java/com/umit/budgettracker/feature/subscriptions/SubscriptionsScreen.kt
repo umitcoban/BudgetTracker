@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.subscriptions
 
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -314,7 +315,8 @@ fun SubscriptionDialog(
             (!priceChanged || ((amount ?: 0L) > 0 && calculatedTryAmount > 0 && month != null))
     }
 
-    AlertDialog(
+    AppAlertDialog(
+        scrollable = false,
         onDismissRequest = onDismiss,
         title = { Text(if (existingSub != null) "Aboneliği Düzenle" else "Yeni Abonelik") },
         text = {
@@ -592,7 +594,7 @@ fun SubscriptionDialog(
     )
 
     if (existingSub != null && showCancelConfirm) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showCancelConfirm = false },
             title = { Text("Aboneliği İptal Et") },
             text = { Text("${currentMonth} ayından itibaren planlanan abonelik ödemeleri durdurulacak. Geçmiş harcamalar silinmez.") },
@@ -602,7 +604,7 @@ fun SubscriptionDialog(
     }
 
     if (existingSub != null && showDeactivateConfirm) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showDeactivateConfirm = false },
             title = { Text("Aboneliği Pasifleştir") },
             text = { Text("Bu abonelik gelecekte planlanan ödemelerde görünmeyecek. Geçmiş harcamalar korunur.") },
@@ -612,7 +614,7 @@ fun SubscriptionDialog(
     }
 
     if (existingSub != null && showDeleteConfirm) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Aboneliği Sil") },
             text = { Text("Bu işlem aboneliği ve fiyat geçmişini kaldırabilir. Bağlı geçmiş harcama varsa silme engellenir.") },

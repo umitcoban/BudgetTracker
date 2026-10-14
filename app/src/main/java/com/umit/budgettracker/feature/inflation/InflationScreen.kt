@@ -294,8 +294,9 @@ private fun TcmbSuggestionsDialog(
     onApply: (List<InflationRate>) -> Unit
 ) {
     var selected by remember { mutableStateOf(suggestions.map { it.month }.toSet()) }
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
+        scrollable = false,
         title = { Text("TCMB tablosundan") },
         text = {
             Column {

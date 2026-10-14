@@ -15,6 +15,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import com.umit.budgettracker.core.parsing.OcrLine
 import com.umit.budgettracker.core.parsing.XlsReader
 import org.xmlpull.v1.XmlPullParser
 import java.util.zip.ZipInputStream
@@ -54,30 +55,78 @@ class DocumentTextExtractor @Inject constructor(
         }
     }
 
+    fun isImage(uri: Uri): Boolean = context.contentResolver.getType(uri).orEmpty().startsWith("image/")
+
     suspend fun recognizeImage(uri: Uri): String = withContext(Dispatchers.IO) { recognize(loadBitmap(uri)) }
 
-    private fun loadBitmap(uri: Uri): Bitmap =
+    /**
+     * OCR line boxes of an image, for callers that rebuild tables themselves ([OcrLayout]).
+     * The image keeps a readable width: narrow screenshots are enlarged, and tall ones (scrolling
+     * captures) are read in overlapping strips instead of being shrunk to fit one pass.
+     */
+    suspend fun recognizeLines(uri: Uri): List<OcrLine> = withContext(Dispatchers.IO) {
+        val bitmap = loadBitmap(uri, fitWidth = true)
+        try {
+            if (bitmap.height <= TILE_HEIGHT) return@withContext recognizeBoxes(bitmap, 0)
+            val step = TILE_HEIGHT - TILE_OVERLAP
+            buildList {
+                var start = 0
+                while (start < bitmap.height) {
+                    val height = minOf(TILE_HEIGHT, bitmap.height - start)
+                    val tile = Bitmap.createBitmap(bitmap, 0, start, bitmap.width, height)
+                    // Each strip owns the band from half the overlap below its top; lines in the
+                    // shared margins are taken from one strip only.
+                    val ownFrom = if (start == 0) 0 else start + TILE_OVERLAP / 2
+                    val ownUntil = if (start + height >= bitmap.height) Int.MAX_VALUE else start + step + TILE_OVERLAP / 2
+                    addAll(recognizeBoxes(tile, start).filter { it.centerY in ownFrom until ownUntil })
+                    tile.recycle()
+                    if (start + height >= bitmap.height) break
+                    start += step
+                }
+            }
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    /**
+     * [fitWidth] scales by width (narrow screenshots up to [MIN_OCR_WIDTH], wide ones down to
+     * [MAX_IMAGE_SIDE]) and leaves the height free; otherwise the longest side is capped.
+     */
+    private fun loadBitmap(uri: Uri, fitWidth: Boolean = false): Bitmap =
         ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, info, _ ->
             decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-            val longest = maxOf(info.size.width, info.size.height)
-            if (longest > MAX_IMAGE_SIDE) {
-                val scale = MAX_IMAGE_SIDE.toFloat() / longest
-                decoder.setTargetSize((info.size.width * scale).toInt(), (info.size.height * scale).toInt())
+            val scale = if (fitWidth) {
+                val byWidth = when {
+                    info.size.width < MIN_OCR_WIDTH -> MIN_OCR_WIDTH.toFloat() / info.size.width
+                    info.size.width > MAX_IMAGE_SIDE -> MAX_IMAGE_SIDE.toFloat() / info.size.width
+                    else -> 1f
+                }
+                minOf(byWidth, MAX_TALL_HEIGHT.toFloat() / info.size.height)
+            } else {
+                val longest = maxOf(info.size.width, info.size.height)
+                if (longest > MAX_IMAGE_SIDE) MAX_IMAGE_SIDE.toFloat() / longest else 1f
             }
+            if (scale != 1f) decoder.setTargetSize((info.size.width * scale).toInt(), (info.size.height * scale).toInt())
         }
 
-    /** OCR lines in reading order: blocks sorted top-to-bottom, then elements joined per line. */
-    private suspend fun recognize(bitmap: Bitmap): String = suspendCancellableCoroutine { continuation ->
+    /** OCR lines in reading order: lines grouped into fixed-height rows, each row read left to right. */
+    private suspend fun recognize(bitmap: Bitmap): String =
+        recognizeBoxes(bitmap, 0)
+            .groupBy { it.centerY / ROW_BUCKET_PX }
+            .toSortedMap()
+            .values
+            .joinToString("\n") { row -> row.sortedBy { it.left }.joinToString("  ") { it.text } }
+
+    private suspend fun recognizeBoxes(bitmap: Bitmap, offsetY: Int): List<OcrLine> = suspendCancellableCoroutine { continuation ->
         recognizer.process(InputImage.fromBitmap(bitmap, 0))
             .addOnSuccessListener { result ->
-                val lines = result.textBlocks.flatMap { it.lines }
-                    .sortedWith(compareBy({ (it.boundingBox?.centerY() ?: 0) / ROW_BUCKET_PX }, { it.boundingBox?.left ?: 0 }))
-                // Lines that share a row (table columns) are joined so a row reads as one line.
-                val rows = lines.groupBy { (it.boundingBox?.centerY() ?: 0) / ROW_BUCKET_PX }
-                    .toSortedMap()
-                    .values
-                    .joinToString("\n") { row -> row.sortedBy { it.boundingBox?.left ?: 0 }.joinToString("  ") { it.text } }
-                continuation.resume(rows)
+                continuation.resume(
+                    result.textBlocks.flatMap { it.lines }.mapNotNull { line ->
+                        val box = line.boundingBox ?: return@mapNotNull null
+                        OcrLine(line.text, box.left, box.top + offsetY, box.right, box.bottom + offsetY)
+                    }
+                )
             }
             .addOnFailureListener { continuation.resumeWithException(it) }
     }
@@ -182,6 +231,10 @@ class DocumentTextExtractor @Inject constructor(
 
     private companion object {
         const val MAX_IMAGE_SIDE = 2400
+        const val MIN_OCR_WIDTH = 1600
+        const val TILE_HEIGHT = 2400
+        const val TILE_OVERLAP = 240
+        const val MAX_TALL_HEIGHT = 16_000
         const val MAX_PDF_PAGES = 8
         const val PDF_RENDER_WIDTH = 1700
         const val ROW_BUCKET_PX = 18

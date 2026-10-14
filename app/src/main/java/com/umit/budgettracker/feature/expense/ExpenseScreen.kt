@@ -1,5 +1,7 @@
 package com.umit.budgettracker.feature.expense
 
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
+import com.umit.budgettracker.core.ui.components.AppDatePickerDialog
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -217,7 +219,7 @@ private fun ExpenseFilterDialog(
     var categoryExpanded by remember { mutableStateOf(false) }
     var accountExpanded by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Harcamaları Filtrele") },
         text = {
@@ -356,7 +358,7 @@ fun ExpenseRow(
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Harcamayı Sil") },
             text = { Text("Bu harcamayı silmek istediğinizden emin misiniz?") },
@@ -502,7 +504,8 @@ fun ExpenseDialog(
         }
     }
 
-    AlertDialog(
+    AppAlertDialog(
+        scrollable = false,
         onDismissRequest = onDismiss,
         title = { Text(if (existingExpense != null) "Harcamayı Düzenle" else if (isInstallment) "Yeni Taksitli Alışveriş" else "Yeni Harcama") },
         text = {
@@ -937,7 +940,7 @@ private fun ExpenseAdjustmentsSection(
     }
 
     adjustmentToDelete?.let { adjustment ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { adjustmentToDelete = null },
             title = { Text("İadeyi Sil") },
             text = { Text("Bu iade kaydını silmek istediğinizden emin misiniz?") },
@@ -970,7 +973,7 @@ private fun AddRefundDialog(
     var note by remember { mutableStateOf("") }
     val amount = MoneyFormatter.parse(amountText) ?: 0L
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("İade Ekle") },
         text = {
@@ -1020,27 +1023,15 @@ private fun ExpenseDatePickerDialog(
         initialSelectedDateMillis = selectedDate.toUtcMillis()
     )
 
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        onDateSelected(millis.toLocalDateUtc())
-                    } ?: onDismiss()
-                }
-            ) {
-                Text("Seç")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Vazgeç")
-            }
+    AppDatePickerDialog(
+        state = datePickerState,
+        onDismiss = onDismiss,
+        onConfirm = {
+            datePickerState.selectedDateMillis?.let { millis ->
+                onDateSelected(millis.toLocalDateUtc())
+            } ?: onDismiss()
         }
-    ) {
-        DatePicker(state = datePickerState)
-    }
+    )
 }
 
 @Composable
@@ -1060,7 +1051,7 @@ private fun AttachmentPreviewDialog(
     attachment: ExpenseAttachment,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(attachment.originalFileName ?: "Fiş Fotoğrafı") },
         text = {

@@ -1,6 +1,8 @@
 package com.umit.budgettracker.feature.goals
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -305,7 +307,11 @@ private fun GoalDetailSheet(
     onDeleteContribution: (GoalContribution) -> Unit
 ) {
     var deleting by remember { mutableStateOf<GoalContribution?>(null) }
-    Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // Scrolls so a long contribution list never pushes the sheet past the screen.
+    Column(
+        Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(progress.goal.name, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             TextButton(onClick = onEdit) { Text("Düzenle") }

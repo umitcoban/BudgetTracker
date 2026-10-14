@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.settings
 
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -179,7 +180,7 @@ fun SettingsScreen(
         }
 
         pendingRestore?.let { pending ->
-            AlertDialog(
+            AppAlertDialog(
                 onDismissRequest = { pendingRestore = null },
                 title = { Text(pending.title) },
                 text = { Text(pending.message) },

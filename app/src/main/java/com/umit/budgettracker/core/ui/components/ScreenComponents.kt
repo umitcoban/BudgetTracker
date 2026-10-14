@@ -1,8 +1,11 @@
 package com.umit.budgettracker.core.ui.components
 
+import android.view.ViewGroup
+import android.view.WindowManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -26,8 +29,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import com.umit.budgettracker.core.parsing.TurkishNumbers
 import com.umit.budgettracker.core.util.DateUtils
 import java.time.Instant
@@ -232,6 +239,142 @@ fun ListRowCard(
     }
 }
 
+/**
+ * The app's dialog, with Material3 AlertDialog's look, laid out inside the safe area so neither
+ * the system bars (3-button navigation included), a display cutout nor the keyboard can cover
+ * its buttons.
+ *
+ * Material3's own dialogs size their window to the screen but get a frame without the bars
+ * (Compose 1.6 on Android 15+), so the bottom of a tall dialog ends up under the navigation bar.
+ * Here the window covers the whole screen and the content pads itself with
+ * [WindowInsets.safeDrawing]; [text] scrolls and gives up height first, so title and buttons
+ * always stay visible.
+ *
+ * Pass `scrollable = false` when [text] holds its own lazy list. Use this instead of
+ * AlertDialog everywhere; [FormDialog], [ConfirmDialog] and the pickers are built on it.
+ */
+@Composable
+fun AppAlertDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    dismissButton: @Composable (() -> Unit)? = null,
+    icon: @Composable (() -> Unit)? = null,
+    title: @Composable (() -> Unit)? = null,
+    text: @Composable (() -> Unit)? = null,
+    scrollable: Boolean = true,
+    fullWidth: Boolean = false
+) {
+    SafeDialog(onDismissRequest, modifier.then(if (fullWidth) Modifier.fillMaxWidth() else Modifier.widthIn(min = 280.dp, max = 560.dp))) {
+        Column(Modifier.padding(24.dp)) {
+            icon?.let {
+                CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.iconContentColor) {
+                    Box(Modifier.padding(bottom = 16.dp).align(Alignment.CenterHorizontally)) { it() }
+                }
+            }
+            title?.let {
+                CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.titleContentColor) {
+                    ProvideTextStyle(MaterialTheme.typography.headlineSmall) {
+                        Box(Modifier.padding(bottom = 16.dp).align(if (icon == null) Alignment.Start else Alignment.CenterHorizontally)) { it() }
+                    }
+                }
+            }
+            text?.let {
+                CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.textContentColor) {
+                    ProvideTextStyle(MaterialTheme.typography.bodyMedium) {
+                        Box(
+                            Modifier.weight(1f, fill = false).padding(bottom = 24.dp)
+                                .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                        ) { it() }
+                    }
+                }
+            }
+            DialogButtons(dismissButton, confirmButton, Modifier.align(Alignment.End))
+        }
+    }
+}
+
+/** Material3 date picker in a [SafeDialog]. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppDatePickerDialog(
+    state: DatePickerState,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    confirmLabel: String = "Seç"
+) {
+    SafeDialog(onDismiss, Modifier.widthIn(max = 360.dp), horizontalMargin = 8.dp) {
+        Column {
+            Box(Modifier.weight(1f, fill = false)) { DatePicker(state = state) }
+            DialogButtons(
+                dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } },
+                confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel) } },
+                modifier = Modifier.align(Alignment.End).padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Full-screen dialog window: scrim clicks dismiss, the card is centred inside the safe area and
+ * never taller than it.
+ */
+@Composable
+private fun SafeDialog(
+    onDismissRequest: () -> Unit,
+    cardModifier: Modifier,
+    horizontalMargin: Dp = 16.dp,
+    content: @Composable () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        val view = LocalView.current
+        SideEffect {
+            (view.parent as? DialogWindowProvider)?.window?.let { window ->
+                window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                window.attributes = window.attributes.apply {
+                    fitInsetsTypes = 0
+                    layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                }
+                @Suppress("DEPRECATION")
+                window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            }
+        }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismissRequest)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(horizontal = horizontalMargin, vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                // Swallows clicks so taps inside the card do not reach the dismissing scrim.
+                modifier = cardModifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {}),
+                shape = AlertDialogDefaults.shape,
+                color = AlertDialogDefaults.containerColor,
+                tonalElevation = AlertDialogDefaults.TonalElevation,
+                content = content
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DialogButtons(dismissButton: @Composable (() -> Unit)?, confirmButton: @Composable () -> Unit, modifier: Modifier) {
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.primary) {
+        ProvideTextStyle(MaterialTheme.typography.labelLarge) {
+            FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                dismissButton?.invoke()
+                confirmButton()
+            }
+        }
+    }
+}
+
 @Composable
 fun ConfirmDialog(
     title: String,
@@ -241,7 +384,7 @@ fun ConfirmDialog(
     onDismiss: () -> Unit,
     destructive: Boolean = false
 ) {
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(message) },
@@ -255,7 +398,8 @@ fun ConfirmDialog(
 }
 
 /**
- * Full-height form dialog with a scrollable body; keeps long forms usable with the keyboard open.
+ * Form dialog with a scrollable body on [AppAlertDialog]; buttons stay above the navigation bar
+ * and the keyboard however long the form is.
  */
 @Composable
 fun FormDialog(
@@ -267,17 +411,12 @@ fun FormDialog(
     extraAction: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        fullWidth = true,
         title = { Text(title) },
         text = {
-            Column(
-                Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                content = content
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
         },
         confirmButton = {
             Button(onClick = onConfirm, enabled = confirmEnabled) { Text(confirmLabel) }
@@ -402,18 +541,15 @@ fun DateField(
         val state = rememberDatePickerState(
             initialSelectedDateMillis = (value ?: LocalDate.now()).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
         )
-        DatePickerDialog(
-            onDismissRequest = { open = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    state.selectedDateMillis?.let { onChange(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()) }
-                    open = false
-                }) { Text("Tamam") }
-            },
-            dismissButton = { TextButton(onClick = { open = false }) { Text("Vazgeç") } }
-        ) {
-            DatePicker(state = state)
-        }
+        AppDatePickerDialog(
+            state = state,
+            onDismiss = { open = false },
+            confirmLabel = "Tamam",
+            onConfirm = {
+                state.selectedDateMillis?.let { onChange(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()) }
+                open = false
+            }
+        )
     }
 }
 
@@ -444,7 +580,7 @@ fun MonthPickerDialog(
 ) {
     var year by remember { mutableIntStateOf(initial.year) }
     val months = listOf("Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara")
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {

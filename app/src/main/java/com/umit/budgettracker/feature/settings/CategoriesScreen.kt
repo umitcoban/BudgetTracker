@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.settings
 
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -124,7 +125,7 @@ fun CategoryDialog(
     var typeExpanded by remember { mutableStateOf(false) }
     val isValid = name.isNotBlank() && selectedIcon.isNotBlank()
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (category.id == 0L) "Yeni Kategori" else "Kategoriyi Düzenle") },
         text = {

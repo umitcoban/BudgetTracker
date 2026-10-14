@@ -165,7 +165,8 @@ fun MainScreen(pendingRoute: MutableStateFlow<String?>) {
                     bottomNavItems.forEach { screen ->
                         NavigationBarItem(
                             icon = { Icon(screen.icon, contentDescription = null) },
-                            label = { Text(screen.title) },
+                            // One line even on 360dp screens ("Harcamalar" used to wrap).
+                            label = { Text(screen.title, maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall) },
                             selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                             onClick = {
                                 navController.navigateToTopLevelDestination(screen)

@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.loans
 
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +17,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
@@ -165,7 +165,7 @@ fun LoansScreen(
     }
 
     loanToClose?.let { loan ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { loanToClose = null },
             title = { Text("Krediyi Erken Kapat") },
             text = {
@@ -190,7 +190,7 @@ fun LoansScreen(
     }
 
     loanToDelete?.let { loan ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { loanToDelete = null },
             title = { Text("Krediyi Sil") },
             text = {
@@ -362,7 +362,7 @@ private fun LoanDialog(
         selectedCategory != null &&
         selectedAccount != null
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (existingLoan == null) "Yeni Kredi" else "Krediyi Düzenle") },
         text = {

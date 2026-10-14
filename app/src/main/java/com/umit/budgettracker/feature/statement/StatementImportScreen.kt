@@ -421,7 +421,8 @@ fun StatementImportScreen(
     }
 
     pickingCategoryFor?.let { index ->
-        AlertDialog(
+        AppAlertDialog(
+            scrollable = false,
             onDismissRequest = { pickingCategoryFor = null },
             title = { Text("Kategori") },
             text = {
