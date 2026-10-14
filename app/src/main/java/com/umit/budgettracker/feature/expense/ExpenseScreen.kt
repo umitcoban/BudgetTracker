@@ -1,5 +1,8 @@
 package com.umit.budgettracker.feature.expense
 
+import com.umit.budgettracker.core.ui.components.AmountField
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
+import com.umit.budgettracker.core.ui.components.AppDatePickerDialog
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -106,7 +109,7 @@ fun ExpenseScreen(
                 .toSortedMap(compareByDescending { it })
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 item {
@@ -217,7 +220,7 @@ private fun ExpenseFilterDialog(
     var categoryExpanded by remember { mutableStateOf(false) }
     var accountExpanded by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Harcamaları Filtrele") },
         text = {
@@ -251,8 +254,8 @@ private fun ExpenseFilterDialog(
                         }
                     }
                 }
-                OutlinedTextField(minimumText, { minimumText = it }, label = { Text("En düşük tutar (TL)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(maximumText, { maximumText = it }, label = { Text("En yüksek tutar (TL)") }, modifier = Modifier.fillMaxWidth())
+                AmountField(value = minimumText, onValueChange = { minimumText = it }, label = "En düşük tutar", modifier = Modifier.fillMaxWidth())
+                AmountField(value = maximumText, onValueChange = { maximumText = it }, label = "En yüksek tutar", modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = {
@@ -300,7 +303,6 @@ fun ExpenseRow(
                     text = "${expense.category?.name ?: "Kategorisiz"} • ${expense.account?.name ?: "Hesapsız"}",
                     style = MaterialTheme.typography.bodySmall
                 )
-                Text(text = expense.expenseDate.toString(), style = MaterialTheme.typography.bodySmall)
                 if (expense.originalCurrency != null && expense.originalAmount != null) {
                     Text(
                         text = "${expense.originalAmount.formatMinor()} ${expense.originalCurrency} • ${MoneyFormatter.format(expense.amount)}",
@@ -356,7 +358,7 @@ fun ExpenseRow(
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Harcamayı Sil") },
             text = { Text("Bu harcamayı silmek istediğinizden emin misiniz?") },
@@ -402,7 +404,7 @@ private fun ExpenseMonthSummary(
             verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             Text(
-                if (isFiltered) "Filtrelenen toplam" else "Bu ay toplam harcama",
+                if (isFiltered) "Filtrelenen toplam" else "Bu ay yapılan harcama",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -416,6 +418,15 @@ private fun ExpenseMonthSummary(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (!isFiltered) {
+                // Özet counts card purchases in the month their statement is paid, so its total
+                // differs from this one; say so where the two numbers meet.
+                Text(
+                    "Kartla yapılanlar Özet'te ekstrenin ödendiği aya sayılır.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -502,7 +513,8 @@ fun ExpenseDialog(
         }
     }
 
-    AlertDialog(
+    AppAlertDialog(
+        scrollable = false,
         onDismissRequest = onDismiss,
         title = { Text(if (existingExpense != null) "Harcamayı Düzenle" else if (isInstallment) "Yeni Taksitli Alışveriş" else "Yeni Harcama") },
         text = {
@@ -937,7 +949,7 @@ private fun ExpenseAdjustmentsSection(
     }
 
     adjustmentToDelete?.let { adjustment ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { adjustmentToDelete = null },
             title = { Text("İadeyi Sil") },
             text = { Text("Bu iade kaydını silmek istediğinizden emin misiniz?") },
@@ -970,7 +982,7 @@ private fun AddRefundDialog(
     var note by remember { mutableStateOf("") }
     val amount = MoneyFormatter.parse(amountText) ?: 0L
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("İade Ekle") },
         text = {
@@ -979,12 +991,7 @@ private fun AddRefundDialog(
                     text = "Kalan iade edilebilir tutar: ${MoneyFormatter.format(remainingAmount)}",
                     style = MaterialTheme.typography.bodySmall
                 )
-                OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = it },
-                    label = { Text("İade Tutarı (TL)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                AmountField(value = amountText, onValueChange = { amountText = it }, label = "İade tutarı", modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
@@ -1020,27 +1027,15 @@ private fun ExpenseDatePickerDialog(
         initialSelectedDateMillis = selectedDate.toUtcMillis()
     )
 
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        onDateSelected(millis.toLocalDateUtc())
-                    } ?: onDismiss()
-                }
-            ) {
-                Text("Seç")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Vazgeç")
-            }
+    AppDatePickerDialog(
+        state = datePickerState,
+        onDismiss = onDismiss,
+        onConfirm = {
+            datePickerState.selectedDateMillis?.let { millis ->
+                onDateSelected(millis.toLocalDateUtc())
+            } ?: onDismiss()
         }
-    ) {
-        DatePicker(state = datePickerState)
-    }
+    )
 }
 
 @Composable
@@ -1060,7 +1055,7 @@ private fun AttachmentPreviewDialog(
     attachment: ExpenseAttachment,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(attachment.originalFileName ?: "Fiş Fotoğrafı") },
         text = {

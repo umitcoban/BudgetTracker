@@ -82,6 +82,15 @@ dependencies {
     // Serialization
     implementation(libs.kotlinx.serialization.json)
 
+    // Background price/holiday refresh, daily checks and weekly summary
+    implementation(libs.androidx.work.runtime.ktx)
+
+    // App lock
+    implementation(libs.androidx.biometric)
+
+    // On-device OCR (bundled Latin model, works offline) for receipts, fund tables and statements
+    implementation(libs.mlkit.text.recognition)
+
     testImplementation(libs.junit)
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)

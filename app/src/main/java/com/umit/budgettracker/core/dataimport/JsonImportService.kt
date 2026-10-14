@@ -5,6 +5,9 @@ import android.net.Uri
 import androidx.room.withTransaction
 import com.umit.budgettracker.core.database.AppDatabase
 import com.umit.budgettracker.core.export.*
+import com.umit.budgettracker.core.database.entity.DismissedSuggestionEntity
+import com.umit.budgettracker.core.database.mapper.toEntity
+import com.umit.budgettracker.core.domain.calculator.InflationRules
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.serialization.json.Json
 import java.io.BufferedReader
@@ -29,7 +32,7 @@ class JsonImportService @Inject constructor(
                 return ImportResult.Error("Bu dosya BudgetTracker uygulamasına ait değil.")
             }
             
-            if (dto.schemaVersion > 14) {
+            if (dto.schemaVersion > 15) {
                 return ImportResult.Error("Bu yedek dosyası uygulamanın desteklemediği bir sürüme ait.")
             }
 
@@ -76,6 +79,19 @@ class JsonImportService @Inject constructor(
                 if (dto.schemaVersion >= 4) {
                     db.expenseAdjustmentDao().insertAll(dto.expenseAdjustments.map { it.toEntity() })
                 }
+                if (dto.schemaVersion >= 15) {
+                    db.inflationRateDao().insertAll(dto.inflationRates.map { it.toEntity() })
+                    db.assetDao().insertAll(dto.assets.map { it.toEntity() })
+                    db.assetDao().insertPrices(dto.marketPrices.map { it.toEntity() })
+                    db.assetDao().insertAlerts(dto.priceAlerts.map { it.toEntity() })
+                    db.savingsGoalDao().insertGoals(dto.savingsGoals.map { it.toEntity() })
+                    db.savingsGoalDao().insertContributions(dto.goalContributions.map { it.toEntity() })
+                    db.plannedExpenseDao().insertAll(dto.plannedExpenses.map { it.toEntity() })
+                    db.assistantDao().insertMerchantRules(dto.merchantRules.map { it.toEntity() })
+                    db.assistantDao().insertDismissed(dto.dismissedSuggestions.map { DismissedSuggestionEntity(key = it) })
+                }
+                // Older backups predate the CPI table; clearAllTables() emptied it, so restore the seed.
+                db.inflationRateDao().insertAllIfMissing(InflationRules.SEED.map { it.toEntity() })
             }
 
             ImportResult.Success(
@@ -181,3 +197,80 @@ private fun NetWorthSnapshotDto.toEntity() = com.umit.budgettracker.core.databas
 private fun ExpenseAttachmentDto.toEntity() = com.umit.budgettracker.core.database.entity.ExpenseAttachmentEntity(id, expenseId, type, localPath, mimeType, originalFileName, createdAt)
 private fun CreditCardStatementPaymentDto.toEntity() = com.umit.budgettracker.core.database.entity.CreditCardStatementPaymentEntity(id, accountId, paymentMonth, amountAtPayment, isPaid, paidAt)
 private fun ExpenseAdjustmentDto.toEntity() = com.umit.budgettracker.core.database.entity.ExpenseAdjustmentEntity(id, expenseId, amount, type, adjustmentDate, note)
+
+// Schema version 15 sections. Unknown enum names fall back inside the domain mappers.
+internal fun InflationRateDto.toEntity() = com.umit.budgettracker.core.database.entity.InflationRateEntity(
+    month = month,
+    monthlyRateBp = monthlyRateBp,
+    annualRateBp = annualRateBp,
+    note = note,
+    source = source
+)
+internal fun AssetDto.toEntity() = com.umit.budgettracker.core.database.entity.AssetEntity(
+    id = id,
+    name = name,
+    type = type,
+    priceCode = priceCode,
+    quantity = quantity,
+    manualValue = manualValue,
+    costAmount = costAmount,
+    allocationTag = allocationTag,
+    interestRateBp = interestRateBp,
+    startDate = startDate,
+    maturityDate = maturityDate,
+    isEmergencyFund = isEmergencyFund,
+    isActive = isActive,
+    note = note
+)
+internal fun MarketPriceDto.toEntity() = com.umit.budgettracker.core.database.entity.MarketPriceEntity(
+    code = code,
+    name = name,
+    price = price,
+    previousPrice = previousPrice,
+    source = source,
+    updatedAt = updatedAt
+)
+internal fun PriceAlertDto.toEntity() = com.umit.budgettracker.core.database.entity.PriceAlertEntity(
+    id = id,
+    priceCode = priceCode,
+    condition = condition,
+    threshold = threshold,
+    isActive = isActive,
+    lastTriggeredAt = lastTriggeredAt,
+    note = note
+)
+internal fun SavingsGoalDto.toEntity() = com.umit.budgettracker.core.database.entity.SavingsGoalEntity(
+    id = id,
+    name = name,
+    targetAmount = targetAmount,
+    targetMonth = targetMonth,
+    priority = priority,
+    iconName = iconName,
+    linkedAssetId = linkedAssetId,
+    isActive = isActive,
+    note = note
+)
+internal fun GoalContributionDto.toEntity() = com.umit.budgettracker.core.database.entity.GoalContributionEntity(
+    id = id,
+    goalId = goalId,
+    amount = amount,
+    date = date,
+    note = note
+)
+internal fun PlannedExpenseDto.toEntity() = com.umit.budgettracker.core.database.entity.PlannedExpenseEntity(
+    id = id,
+    title = title,
+    amount = amount,
+    dueDate = dueDate,
+    categoryId = categoryId,
+    savedAmount = savedAmount,
+    isYearly = isYearly,
+    isCompleted = isCompleted,
+    note = note
+)
+internal fun MerchantRuleDto.toEntity() = com.umit.budgettracker.core.database.entity.MerchantRuleEntity(
+    id = id,
+    pattern = pattern,
+    categoryId = categoryId,
+    hitCount = hitCount
+)

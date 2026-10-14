@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Read first
 
-`CODEBASE_CONTEXT.md` is the authoritative product-rules document (money as `Long` minor units, local-only privacy, Turkish UI, effective-month salary/statement rules, duplicate prevention, export/import schema history, the cross-layer change checklist). Read it before changing any domain model, persisted data, or financial lifecycle. This file does not repeat it.
+`CODEBASE_CONTEXT.md` is the authoritative product-rules document (money as `Long` minor units, local-only privacy and the network policy for public data sources, Turkish UI, effective-month salary/statement rules, duplicate prevention, export/import schema history, the cross-layer change checklist). Read it before changing any domain model, persisted data, or financial lifecycle. This file does not repeat it.
 
 `gradle/libs.versions.toml` and `app/build.gradle.kts` remain the source of truth for versions; update the "Current Build Snapshot" section there when bumping them.
 
@@ -21,7 +21,9 @@ Single-module Android app (`:app`). No lint/ktlint/detekt is configured.
 ./gradlew clean test assembleRelease     # release sanity check (R8 + resource shrinking enabled)
 ```
 
-Test results land in `app/build/test-results/testDebugUnitTest/*.xml`. The one instrumented suite is `MigrationTest` (Room `MigrationTestHelper` over `app/schemas/`), run with `./gradlew :app:connectedDebugAndroidTest` on an emulator — it uninstalls the app afterwards, wiping that device's app data.
+Test results land in `app/build/test-results/testDebugUnitTest/*.xml`. The one instrumented suite is `MigrationTest` (Room `MigrationTestHelper` over `app/schemas/`), run with `./gradlew :app:connectedDebugAndroidTest` on an emulator — it uninstalls the app afterwards, wiping that device's app data. Data-source parsers are tested against real responses in `app/src/test/resources/datasources/` (kept verbatim, see `.gitattributes`).
+
+Debug-only deep links for checking screens on a device: `adb shell am start -n com.umit.budgettracker/.MainActivity --es route <route>` (any `Screen.route`, e.g. `assets`, `inflation`, `simulation`).
 
 ## Architecture
 
@@ -43,12 +45,12 @@ feature/*/XxxScreen.kt          Compose, presentation only, collects StateFlow
 - Domain models live in `core/domain/model` and are distinct from Room entities. Every entity has a `toDomain`/`toEntity` pair in the single `Mappers.kt`; when adding a field, update model, entity, and both mapper directions together (use named arguments).
 - ViewModels follow one pattern: `MutableStateFlow<YearMonth>` for the selected month → `flatMapLatest` → `combine` of repository/calculator flows → `stateIn(viewModelScope, WhileSubscribed(5000), Loading)`. Mutations run in `viewModelScope.launch`.
 - `MonthlyBudgetCalculator` is the central aggregator: it combines salary rules, incomes, expenses, budgets, refund adjustments, statement rules/payments, and the pure `calculatePayments` functions of `SubscriptionMonthlyCalculator`, `LoanMonthlyCalculator`, and `FixedExpenseMonthlyCalculator`. Dashboard, Reports, and Category Budgets all derive from its `MonthlyBudgetSummary`, so a change to "what counts in a month" belongs there, not in a ViewModel. Use `getSummariesForMonths(months)` when a screen needs more than one month — it opens one set of Room subscriptions and one exchange-rate lookup per currency; `getSummaryForMonth` is the single-month wrapper. It loads expenses only for `[firstMonth - MAX_PLANNING_MONTH_SHIFT, lastMonth]`, so that constant must track `planningMonth`.
-- `BudgetWarningRules` builds `MonthlyBudgetSummary.warnings` (severity-ordered; Dashboard shows only the first). Upcoming-payment warnings depend on `LocalDate.now()`, evaluated inside the calculator's `combine`; keep date-sensitive assertions in `BudgetWarningRulesTest`, which takes `today` explicitly.
+- `BudgetWarningRules` builds `MonthlyBudgetSummary.warnings` (severity-ordered, contract in CODEBASE_CONTEXT.md; Dashboard shows the first non-positive one with a "+N uyarı daha" expander, `POSITIVE_TREND` is good news). Anomaly inputs come from `AnomalyRules`. Upcoming-payment warnings depend on `LocalDate.now()`, evaluated inside the calculator's `combine`; keep date-sensitive assertions in `BudgetWarningRulesTest`, which takes `today` explicitly.
 - `SalaryRules`, `SubscriptionRules`, `LoanPaymentRules` are pure functions implementing the effective-month semantics; the corresponding `*Test.kt` files are the spec for those rules.
 
 ### Persistence
 
-- `core/database/AppDatabase.kt` declares entities and the Room version (currently 16, `exportSchema = true`, schemas committed under `app/schemas/`).
+- `core/database/AppDatabase.kt` declares entities and the Room version (currently 17, `exportSchema = true`, schemas committed under `app/schemas/`). For a new table, build once, then copy the `createSql` strings from the generated schema JSON into the migration so they match Room exactly.
 - All migrations are inline objects in `core/di/DatabaseModule.kt`, collected in `DatabaseModule.migrations` (used by both the builder and `MigrationTest`). There is no destructive fallback. Use the existing `addNullableColumnIfMissing(db, table, column, type)` helper for new nullable columns, and add a seed-then-validate case to `MigrationTest` for every new version.
 - Default categories and payment accounts are seeded in the `RoomDatabase.Callback.onCreate` inside `DatabaseModule`.
 - Type converters (`core/database/converter/Converters.kt`): `LocalDate` ↔ epoch-day `Long`, `YearMonth` ↔ `"yyyy-MM"` text. Month-keyed queries compare on that text form.
@@ -58,23 +60,30 @@ feature/*/XxxScreen.kt          Compose, presentation only, collects StateFlow
 
 - `core/export/ExportDto.kt` (DTOs), `JsonExportService.kt`, `CsvExportService.kt`, `PdfExportService.kt`, `FullBackupService.kt` (ZIP with `data.json` + `attachments/`); `core/dataimport/JsonImportService.kt` is the reverse; `core/database/DatabaseBackupService.kt` handles raw DB files.
 - The PDF report takes a `PdfReportData` (selected month + 12-month history + category trends, built in `SettingsViewModel` from `getSummariesForMonths`) and draws with `android.graphics` via the helpers in `core/export/PdfCharts.kt` — the Canvas twins of `core/ui/charts`. It cannot run in JVM unit tests; verify on an emulator (Ayarlar → PDF Rapor) and render the file to check layout.
-- The JSON schema version is a literal in two places that must move together: `JsonExportService` (`schemaVersion = N`) and the `dto.schemaVersion > N` guard in `JsonImportService`. Import gates each optional section with `if (dto.schemaVersion >= k)`.
+- The JSON schema version must move in two places together: `SCHEMA_VERSION` in `JsonExportService.kt` and the `dto.schemaVersion > N` guard in `JsonImportService` (currently 15). Import gates each optional section with `if (dto.schemaVersion >= k)`.
 - `app/proguard-rules.pro` keeps `core.export.**`, `core.dataimport.**`, `core.database.entity.**`, and `core.database.dao.**` wholesale; new serializable DTOs outside those packages need their own keep rule.
 
 ### Navigation
 
 - Routes are `Screen` sealed-class objects in `core/navigation/Screen.kt` (route + Turkish title + icon); `bottomNavItems` selects the five tab destinations. `NavGraph.kt` maps each `Screen` to a composable. `MainActivity` shows the bottom bar only when the current route is in `bottomNavItems`.
-- Use `navigateToTopLevelDestination` / `navigateBackToDashboard` from `NavigationExtensions.kt` rather than raw `navigate` for tab and back-to-home moves.
+- Use `navigateToTopLevelDestination` / `popBackStackOrDashboard` from `NavigationExtensions.kt` rather than raw `navigate` / `popBackStack` for tab and back moves; screens reachable from the hub, widget or notifications use `popBackStackOrDashboard` so "Geri" never leaves the app from a deep link.
+- The fifth tab (route `settings`, title "Menü") is a hub of feature tiles plus record management, Tercihler and backup. New tools get a tile there.
 
 ### Other notable pieces
 
-- `core/network/ExchangeRateService.kt` is the only network code (user-triggered Frankfurter lookup); everything else is offline.
+- Network: `core/network/ExchangeRateService.kt` (user-triggered Frankfurter lookup) and `core/network/sources/MarketDataService.kt` (TCMB FX, Truncgil gold, gold-api fallback, optional CoinGecko, Nager holidays, on-demand TCMB CPI table). Parsers are pure (`SourceParsers`). Only public data is downloaded; see the Network Policy in CODEBASE_CONTEXT.md and `docs/DATA_SOURCES.md`.
+- `core/work/` — WorkManager workers (prices 12 h, holidays 14 d, weekly summary, widget, daily checks enqueued by the 09:00 alarm). Workers get singletons via the Hilt `WorkerEntryPoint`; `BackgroundChecks` holds the notification logic; `AppNotifier` posts local notifications with a deep-link route.
+- `core/domain/calculator/CashFlowProjector` is the single builder of a month's cash-flow events (Cash Flow screen, smart cash forecast, background checks). Asset values, inflation compounding, goals, simulation and anomalies are pure `*Rules` objects next to it.
+- `core/parsing/` (Turkish numbers/dates, fund tables, bank statements, receipts, notifications) and `core/ocr/DocumentTextExtractor` (ML Kit OCR on device, PDF pages via `PdfRenderer`, XLSX reader, legacy `.xls` via the pure `core/parsing/XlsReader`). Expenses created from these flows go through `RecordExpenseUseCase` (duplicate check + merchant learning).
+- `core/security/AppLock.kt` (PIN hash + lock state; `MainActivity` is a `FragmentActivity` for `BiometricPrompt`), `core/widget/BudgetWidget.kt` (RemoteViews widget), `core/capture/ExpenseCaptureService.kt` (opt-in notification listener → drafts).
+- Secondary screens use `core/ui/components/ScreenComponents.kt` (`DetailScaffold`, `FormDialog`, `AmountField` with Turkish parsing via `MoneyInput`, `MonthField`, `DateField`, `EmptyState`, `HeroCard`, …). Prefer these over hand-rolled scaffolds/dialogs so back navigation, spacing and input parsing stay consistent. Dialogs go through `AppAlertDialog` / `FormDialog` / `ConfirmDialog` / `AppDatePickerDialog`, never Material3 `AlertDialog` or `DatePickerDialog` directly: those draw under the navigation bar on Android 15+ (Compose 1.6), the app's versions use a full-screen window padded with `WindowInsets.safeDrawing`. Pass `scrollable = false` when the body holds a lazy list.
 - `core/reminder/` — `PaymentReminderScheduler` + `PaymentReminderReceiver` + `BootCompletedReceiver` implement the 09:00 local reminder.
 - `core/util/MoneyFormatter.kt` formats/parses TRY kuruş; UI text-field input is parsed here, never with `Double` arithmetic in domain code.
 - `core/ui/charts/Charts.kt` holds the Canvas-based charts (donut + legend, stacked bars, sparkline, legend row) — no chart library. They take `Long` amounts, use theme colors, keep 2dp surface gaps between fills, and report tap selection back to the caller, which renders the values as text. Fold donut input to ≤ 6 slices with `foldTail` before calling.
 
 ## Conventions worth knowing
 
-- User-facing strings are hardcoded Turkish literals in Kotlin, not `strings.xml` (which only holds the app name). Match that; do not start extracting to resources piecemeal.
+- User-facing strings are hardcoded Turkish literals in Kotlin, not `strings.xml` (which only holds the app name and the few labels XML must reference: shortcuts, widget description, notification-listener label). Match that; do not start extracting to resources piecemeal.
+- Prices / quantities / rates are scaled `Long`s (`PRICE_SCALE`, `QUANTITY_SCALE` = 1_000_000; rates in basis points). Parse user/bank text with `TurkishNumbers` (exact, BigDecimal) and display with `ValueFormats` / `MoneyFormatter`.
 - Tests are JUnit4 + `runBlocking`, and use hand-written `Fake*Repository` classes implementing the domain repository interfaces (see `MarkSubscriptionPaymentAsPaidUseCaseTest`) rather than Mockito, even though Mockito is on the classpath.
 - `app/src/test/.../com/umityasincoban/` and `androidTest` contain only the Android Studio template examples; real tests live under `com.umit.budgettracker`.

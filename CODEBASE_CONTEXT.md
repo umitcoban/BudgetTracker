@@ -19,7 +19,7 @@ This document is the persistent project context for future Codex sessions. Read 
 - Analytics: none
 - Ads: none
 - Network dependency for core features: none
-- Optional network use: user-triggered exchange-rate lookup for foreign-currency expenses and subscriptions
+- Optional network use: public price / rate / index / holiday downloads (see "Network Policy"); user-triggered exchange-rate lookup for foreign-currency expenses and subscriptions
 
 BudgetTracker is a local-only personal finance and monthly budgeting app. It is intended to be deterministic, privacy-friendly, and safe for long-term local financial data.
 
@@ -38,10 +38,13 @@ BudgetTracker is a local-only personal finance and monthly budgeting app. It is 
 - Room: 2.8.4
 - Hilt: 2.60.1
 - Compose BOM: 2024.05.00
+- WorkManager: 2.10.1 (workers get dependencies through a Hilt `@EntryPoint`, no hilt-work)
+- Biometric: 1.1.0 (`MainActivity` is a `FragmentActivity` for `BiometricPrompt`)
+- ML Kit text recognition (bundled Latin model, offline): 16.0.1
 - Source of truth for versions: `gradle/libs.versions.toml`, `gradle/wrapper/gradle-wrapper.properties`, `gradle/gradle-daemon-jvm.properties`
 - Database name: `budget_tracker_db`
-- Room database version: 16
-- JSON export schema version: 14
+- Room database version: 17
+- JSON export schema version: 15
 
 ## Non-Negotiable Product Rules
 
@@ -60,7 +63,22 @@ Do not add:
 
 All user finance data must remain on the device.
 
-Exception: exchange-rate lookup is allowed as a user-triggered helper for foreign-currency expense and subscription entry. It must not create accounts, sync user data, upload financial records, or become required for core usage. If rate lookup fails, the user must be able to enter the exchange rate manually.
+Exception: see "Network Policy" below. Public data may be downloaded; nothing about the user is ever sent.
+
+### Network Policy
+
+Optional, public data sources (exchange rates, gold, inflation, public holidays, optional crypto) may be fetched periodically in the background. Rules:
+
+- No personal or financial data is ever sent; no accounts or sessions; requests are plain GETs of public URLs.
+- Core features work without network. Every downloaded value has a "last updated" label and a manual-entry alternative.
+- Every source can be switched off in Menü → Tercihler → Veri kaynakları (DataStore, device-only).
+- Background fetches run through WorkManager with a network constraint (prices every 12 h, holidays every 14 days); failure is silent (last known value stays) and transient errors retry with exponential backoff (max 3 attempts).
+- One `MarketDataService` owns all fetching; parsers are pure functions in `core/network/sources/SourceParsers.kt`, tested against real responses in `app/src/test/resources/datasources/`. A changed format must yield an empty result, never a crash.
+- User-Agent stays ASCII (TCMB rejects non-ASCII agents with an HTML error page).
+- Network / file code never lives in composables (ViewModel → use case / service → repository).
+- Sources, URLs, verification results and fragility notes: `docs/DATA_SOURCES.md`.
+
+The original user-triggered exchange-rate lookup (Frankfurter) for foreign-currency expenses and subscriptions is unchanged; manual rate entry must stay available.
 
 ### Money Storage
 
@@ -98,6 +116,7 @@ com.umit.budgettracker
       repository
     dataimport
     datastore
+    capture          notification → expense draft (opt-in NotificationListenerService)
     di
     domain
       calculator
@@ -106,12 +125,20 @@ com.umit.budgettracker
       usecase
     export
     navigation
+    network
+      sources        public price / holiday / CPI sources + pure parsers
+    ocr              on-device text extraction (images, PDF pages, XLSX, CSV)
+    parsing          Turkish numbers/dates, fund table, bank statement, receipt, notification parsers
+    security         app lock (PIN hash, lock state)
     ui
       charts
       components
       theme
     util
+    widget           home-screen widget (RemoteViews)
+    work             WorkManager workers, scheduler, background checks, notifications
   feature
+    assets           Varlıklarım + fon içe aktarma
     budgets
     cards
     cashflow
@@ -119,14 +146,25 @@ com.umit.budgettracker
     debt
     expense
     fixedexpenses
+    goals            birikim hedefleri + acil durum fonu
+    inflation
+    insights         tekrarlayan harcama önerileri, bildirim taslakları, işyeri kuralları
     installments
     loans
+    lock
     networth
+    planner          büyük harcama planlayıcı
+    preferences      kilit, veri kaynakları, bildirimler, widget, bildirim yakalama
+    quickadd
+    receipt          fiş tarama (OCR)
     reports
     salary
-    settings
+    settings         "Menü" sekmesi (hub) + yedekleme
+    simulation       "Ya şöyle olsaydı?" + zam planı
+    statement        banka ekstresi karşılaştırma
     subscriptions
     templates
+    yearend
 ```
 
 Architectural expectations:
@@ -164,6 +202,19 @@ Architectural expectations:
 - Raw DB backup/restore
 - Full ZIP backup/export/import
 - Receipt/photo attachments stored in app-private files
+- Assets (gold, currency, funds, deposits, cash/bank balances, crypto, stocks) with live prices, cost/profit and price alerts
+- Fund table import (screenshot OCR, PDF, XLSX, CSV, pasted text)
+- Purpose-bound savings goals with contributions; emergency-fund indicator
+- Manual monthly CPI with real-value calculations
+- Big-expense planner with monthly reserve
+- Smart cash warning (projected tightest day) and pre-payment / holiday-shift notes
+- "What if" simulation and raise planning
+- Anomaly and trend warnings, recurring-expense suggestions
+- Bank statement comparison and receipt OCR
+- Year-end report (screen + PDF page)
+- Home-screen widget, app shortcuts, quick add
+- App lock (biometric + PIN), FLAG_SECURE option
+- Optional notification capture into drafts
 
 ## Navigation
 
@@ -173,9 +224,9 @@ Bottom navigation contains:
 - `Harcamalar`
 - `Kartlar`
 - `Raporlar`
-- `Ayarlar`
+- `Menü` (route `settings`): a hub of tiles (Varlık ve birikim, Planlama ve analiz, Hızlı araçlar), record management, Tercihler and backup/export.
 
-Additional routes include salary management, additional income, fixed expenses, installments, subscriptions, loans, cash flow, category budgets, expense templates, debt tracking, net worth, and categories.
+Every secondary screen uses `DetailScaffold` (back arrow "Geri", title + subtitle, optional FAB/snackbar). Screens that can be opened from several places (hub, dashboard chips, widget, notification) go back with `popBackStackOrDashboard()`, which lands on Özet when there is nothing to pop. `MainActivity` accepts a route in the `route` extra (notifications) and the `QUICK_ADD` / `SCAN_RECEIPT` actions (widget, launcher shortcuts).
 
 ## Database Model
 
@@ -200,6 +251,9 @@ The Room database currently includes these entities:
 - `IncomeEntity`
 - `FixedExpenseEntity`
 - `CreditCardStatementRuleEntity`
+- Version 17: `InflationRateEntity` (`inflation_rates`, PK month), `AssetEntity`, `MarketPriceEntity` (PK code), `PriceAlertEntity`, `SavingsGoalEntity`, `GoalContributionEntity`, `PlannedExpenseEntity`, `PublicHolidayEntity` (cache, not exported), `MerchantRuleEntity` (unique pattern), `DismissedSuggestionEntity`, `ExpenseDraftEntity` (not exported)
+
+Migration `16 -> 17` only creates tables (SQL copied from the generated `17.json`) and inserts the 12-month CPI seed with `INSERT OR IGNORE`. Fresh installs seed the same CPI rows in `onCreate`, and a JSON import older than schema 15 re-seeds them after `clearAllTables()`.
 
 Default seeded categories:
 
@@ -265,6 +319,8 @@ JSON export/import:
 - Loan payment records are included in schema version 12.
 - Credit-card statement and due-date rules are included in schema version 13.
 - Salary rule pay day (`payDay`, nullable) is included in schema version 14.
+- Inflation rates, assets, market prices, price alerts, savings goals, goal contributions, planned expenses, merchant rules and dismissed suggestion keys are included in schema version 15. Public holidays (refetchable) and notification drafts (transient) are not exported. Device preferences (lock PIN hash, source toggles, capture allow-list) live in DataStore and are never part of a backup.
+- `JsonExportService` writes `SCHEMA_VERSION` (core/export); keep the literal in the `dto.schemaVersion > N` import guard in step.
 - Replace-mode imports must be confirmed by the user. JSON import, raw DB restore and full ZIP restore all go through the same confirmation dialog in Settings.
 - Exports are written with `encodeDefaults = true`, so `appName` and empty sections are always present in the file.
 
@@ -361,10 +417,17 @@ Rules:
 2. `CATEGORY_LIMIT_EXCEEDED` — spending above the category budget
 3. `UPCOMING_CARD_PAYMENT` — unpaid statement due within 7 days, or already past due this month
 4. `UPCOMING_LOAN_PAYMENT` — same window for loan instalments
-5. `CATEGORY_SPENDING_SPIKE` — category at ≥150% of its 3-month average and ≥5% of the month's spending
-6. `CATEGORY_LIMIT_80_PERCENT` — budget usage between 80% and 100%
+5. `POSSIBLE_DUPLICATE_EXPENSE` — same day, same amount, similar title (not linked to a subscription/loan/fixed expense/installment)
+6. `CATEGORY_SPENDING_SPIKE` — category at ≥150% of its 3-month average and ≥5% of the month's spending
+7. `SUBSCRIPTION_PRICE_INCREASE` — a price-history entry starting this month is higher than the previous one (same currency)
+8. `CATEGORY_LIMIT_80_PERCENT` — budget usage between 80% and 100%
+9. `POSITIVE_TREND` — a category fell every month for 3 months and by ≥10% overall (good news; `BudgetWarning.isPositive`)
 
-Percentages are integer arithmetic. Upcoming-payment rules only apply when the selected month is the current calendar month.
+Percentages are integer arithmetic. Upcoming-payment rules only apply when the selected month is the current calendar month. Detection lives in `AnomalyRules`; the Dashboard shows the first non-positive warning with a "+N uyarı daha" expander and uses a positive trend as the good-news insight.
+
+## Planned Payment Month Rule
+
+Planned subscription, loan and fixed-expense payments count in the month their money leaves, like card purchases: a card-paid item is due with the statement that covers its billing day (`planningMonthFor`), other accounts in the billing month. A month's planned items therefore come from the calendar months `[month − MAX_PLANNING_MONTH_SHIFT, month]` whose payment lands in it. Whether an item is already processed is decided in its own calendar month (where its linked expense is dated), so processing a card-paid item moves it from "planned" to the next statement's card spending without counting it twice or hiding the following month's bill (fixed 2026-10).
 
 ## Monthly Summary Batching Rule
 
@@ -376,7 +439,55 @@ The cash-flow calendar lists cash movements, not accounting entries:
 
 - Salary is an inflow on the rule's `payDay` (day 1 when unset) and one-off incomes on their dates.
 - Expenses paid from cash/bank accounts are outflows on their dates; credit-card purchases are **not** listed — the card's statement payment on its due date is the outflow.
-- Planned subscription, loan and fixed-expense payments appear on their days until processed.
+- Planned subscription, loan and fixed-expense payments appear until processed: on their billing day when paid from cash/bank, on the **statement due date** of the statement that pays them when card-paid (same `planningMonthFor` rule as the monthly summary, so a card-paid item can come from one of the two previous calendar months).
+
+## Assets and Valuation Rule
+
+- Quantities are `Long` at `AssetValuationRules.QUANTITY_SCALE = 1_000_000` (2,5 gr = 2_500_000); prices are TRY at `PRICE_SCALE = 1_000_000` (fund prices carry six decimals: 0,140017 ₺ = 140_017).
+- `value = quantity × price` is computed exactly with `BigInteger` and rounded **half-up to kuruş once**. Profit = value − cost; profit percent is basis points, half-up.
+- Priced types (gold, currency, fund, crypto, stock) point at a `MarketPrice` by code (`FX:USD`, `GOLD:GRAM`, `FUND:GTL`, `STOCK:…`, `CRYPTO:BTC`). Cash/deposit/other carry their TRY value in `manualValue`. Deposits accrue simple gross interest (principal × rate × days / 365) up to today / maturity.
+- Market prices keep `previousPrice` only from the same source, so a TCMB vs Truncgil quote gap is not shown as a move.
+- Buying adds quantity and cost; selling lowers cost proportionally (average cost kept).
+- Assets marked `isEmergencyFund` feed the emergency fund. Type `CASH` balances are the starting point of the smart cash forecast.
+- An asset linked to a savings goal cannot be deleted (deactivate instead). Net worth snapshots stay historical; the Net Varlık dialog only *prefills* a new snapshot from live assets, one snapshot per month.
+- Fund import parses broker tables by finding a 3-letter code and the number triple `quantity × price ≈ value` (0,5 % tolerance) — column order does not matter. Account/customer numbers are never stored.
+
+## Inflation Rule
+
+- Monthly CPI is user data (`inflation_rates`, one row per month, re-entry updates). Rates are basis points (%1,84 → 184). Annual rate is optional.
+- Compounding uses exact fractions (`InflationRules.factor`) and rounds once when applied. Missing months reuse the last known rate and the result is labelled "tahmini".
+- If an annual rate is entered and the twelve monthly rates are complete, a difference above 0,1 point is flagged ("Rakamları kontrol et").
+- A reminder fires from the 3rd of each month until the previous month is entered. TCMB's HTML table can be fetched on demand; rows are only saved after the user selects them.
+
+## Savings Goals and Emergency Fund Rule
+
+- A goal's balance is the sum of its contributions (withdrawals are negative), or the live value of a linked asset.
+- Required monthly = remaining ÷ months left (inclusive, rounded up); pace = contributions of the last three months ÷ 3; projected finish and delay derive from the pace.
+- Leftover suggestions (`SavingsGoalRules.suggestAllocation`) serve higher priority first and share shortfalls proportionally. They are only suggestions; applying them adds contribution records after confirmation — no money moves.
+- Goals with contributions cannot be deleted (deactivate instead).
+- Emergency fund: average `MonthlyBudgetSummary.essentialExpenseAmount` of the last three months with data (rent/bill/"Aidat" categories, paid and unpaid subscriptions, loans, fixed expenses, installments) vs the value of emergency-fund assets; target months is a device preference (default 6).
+
+## Planning, Forecast and Simulation Rules
+
+- Big expenses (`planned_expenses`): monthly reserve = (amount − saved) ÷ months until due (inclusive, rounded up). Yearly items roll to the next year when completed. They appear in the cash-flow calendar on their due date and never create `Expense` rows.
+- `CashFlowProjector` is the single builder of a month's cash-flow events (used by the Cash Flow screen, the smart cash forecast and background checks). Planned events on a weekend/public holiday carry a "bankada X günü işlenir" note (`BusinessDayRules`); amounts and months are not shifted.
+- Smart cash forecast (`CashForecastRules`): starts from active `CASH` asset balances, applies planned events from today and actual events after today for this and next month, and reports the lowest balance, the outflow causing it and the next income.
+- Simulation (`SimulationRules`) is read-only: 12 future months from `getSummariesForMonths`, plus variable spending equal to the last three months' average `variableExpenseAmount`. Scenarios: cancel subscription, close loan early (lump sum, optional payoff amount), cut a category by %, salary raise, fixed-expense (rent) raise, extra monthly cost/income. "Planla" on a raise writes real rules only after confirmation: salary → new effective-month rule; fixed expense → current record ends the month before and a new record starts with the raised amount.
+
+## Assistant Features Rule
+
+- Recurring suggestions: hand-entered expenses (no subscription/loan/fixed/installment link) with the same normalised title in ≥3 of the last 6 months, latest within the last month, amounts within ±15 % of the median, not matching an existing subscription/fixed-expense title. Dismissed keys are stored and never suggested again. Accepting opens an editable form (default start: next month) — nothing is created silently.
+- Merchant rules (`merchant_rules`) learn "normalised merchant → category" whenever the user saves a receipt, statement line, approved draft or titled quick add. Normalisation folds Turkish characters and drops stand-alone numbers ("A101" keeps its digits).
+- Receipt scan and statement import run OCR/text extraction on device; files and raw text are never stored. Only user-confirmed expenses are saved, each through `RecordExpenseUseCase` (duplicate check: same day, same amount, similar title). The receipt photo is copied into the normal attachment storage.
+- Statement formats (verified 2026-10-13 against real Garanti BBVA, QNB and Yapı Kredi exports; every file reconciled to the bank's own total): legacy `.xls` (BIFF8, read by `core/parsing/XlsReader`), `.xlsx`, CSV and PDF/OCR text. Table files are read by header (date / description / amount, optional "Etiket"/"Sektör" and instalment columns), tolerating QNB's one-column header offset; the spending sign is whichever sign most rows carry (Garanti exports spending as negative). Text mode treats a trailing "+" (Garanti PDF), a leading "- " (QNB) or "+" (Yapı Kredi) and payment wording as credits. Bonus/ParaPuan/Worldpuan campaign lines and summary lines are skipped; masked card numbers split multi-card statements (card chips on screen); instalment ("3/9") and foreign amounts ("8,18 EUR") move to the note. Instalment lines start unchecked. The bank's label suggests a category when no merchant rule exists (`BankCategoryMap`). Test fixtures under `app/src/test/resources/statements/` copy only the layouts, with invented data.
+- Statement matching: same amount and date ±2 days = matched; similar title within the window but a different amount, or payment/refund lines = mismatch; app expenses in the period missing from the statement are listed separately.
+- Notification capture is opt-in, limited to user-selected apps, never reads SMS, ignores OTP/incoming-money texts and stores only a draft (title, amount, date, app label). Drafts never count until approved.
+
+## App Lock, Widget and Background Work
+
+- Lock: PIN (4–8 digits) is stored as salted PBKDF2 hash with its length in DataStore; biometric unlock via `BiometricPrompt` (weak or strong). Delay: immediately / 1 min / 5 min after the app goes to background. Leaving for the app's own pickers/camera does not re-lock. `FLAG_SECURE` is an option. Lock settings are device-only and never backed up.
+- Widget (`BudgetWidgetProvider`, RemoteViews) shows the current month's remaining-after-planned-payments and spent ratio from `MonthlyBudgetCalculator`, plus up to three quick-add category chips (chosen in Tercihler). It refreshes when the app goes to background, after quick add / receipt / statement saves and every 3 h.
+- Workers: `PriceRefreshWorker` (12 h, then price alerts), `HolidayRefreshWorker` (14 d), `DailyCheckWorker` (enqueued by the 09:00 reminder alarm: inflation reminder, cash shortfall within 14 days, foreign-currency subscription and holiday-shift notes within 3 days, deposit maturity within 3 days), `WeeklySummaryWorker` (Sunday 20:00), `WidgetRefreshWorker`. Each notification type can be switched off.
 
 ## Local Reminder Rule
 
@@ -595,7 +706,7 @@ Rules:
 
 - A category with spending and no budget must still appear in Dashboard and Reports.
 - A category with a budget but no spending must also remain visible with a zero amount.
-- Credit-card expenses must use their planning/payment month, consistent with the rest of the monthly summary.
+- Category amounts (and category budgets) use the **calendar month of the purchase**, also for credit-card expenses: a budget answers "what did I spend this month". Totals, the card payment and "Plan sonrası kullanılabilir" keep using the payment month (decision 2026-10).
 - Refund adjustments must reduce the displayed category amount; the amount must not drop below zero.
 - When a category budget exists, show both the spending amount and the budget usage percentage.
 
@@ -608,6 +719,10 @@ Prevent duplicates for:
 - Same effective-month salary rule
 - Same month saving goal
 - Same category/month budget
+- Same month CPI rate (re-entry updates)
+- Same month net worth snapshot (saving again replaces it)
+- Same merchant pattern rule (latest category wins, hit count grows)
+- Same fund code on import (updates the holding instead of adding a second one)
 
 Expected behavior:
 
@@ -653,6 +768,12 @@ Current focused regression coverage includes:
 - Budget warnings order by severity; upcoming card/loan warnings fire only for the month the user is in.
 - Category spike detection needs a full three-month baseline and ignores immaterial categories.
 - Credit-card statement totals are net of refunds.
+- Asset valuation reproduces the broker fund table (30.272,33 ₺, +2.675,30 ₺, %9,69) from parsed rows; large holdings do not overflow.
+- CPI seed compounds to %29,72 (published %29,73); estimated months are flagged.
+- Source parsers read the real TCMB / Truncgil / gold-api / Nager / TCMB CPI fixtures and return empty results on changed formats.
+- Warning order with the new anomaly types; duplicates, subscription increases and positive trends.
+- Schema 14 JSON decodes with empty schema-15 sections; schema-15 sections round-trip.
+- `MigrationTest.migrate16To17_…` keeps existing rows and seeds CPI (instrumented).
 
 - Fixed expense processing prevents duplicate monthly planned fixed-payment totals.
 - Credit-card expenses after statement day move to the next planning/payment month.

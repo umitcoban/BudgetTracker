@@ -36,7 +36,7 @@ interface ExpenseDao {
     suspend fun countFixedExpenseExpensesForPeriod(fixedExpenseId: Long, startDate: Long, endDate: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(expense: ExpenseEntity)
+    suspend fun insert(expense: ExpenseEntity): Long
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(expenses: List<ExpenseEntity>)

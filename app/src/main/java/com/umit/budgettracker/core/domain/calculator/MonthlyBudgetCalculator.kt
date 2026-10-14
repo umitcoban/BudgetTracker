@@ -89,7 +89,9 @@ class MonthlyBudgetCalculator @Inject constructor(
         }
 
         return combine(incomeFlow, expenseFlow, plannedFlow) { income, expense, planned ->
-            val rates = subscriptionCalculator.resolveRates(planned.subscriptions, months)
+            // Card-paid planned items of the two previous calendar months can fall due in a month.
+            val rateMonths = computedMonths.flatMap { m -> (0..MAX_PLANNING_MONTH_SHIFT).map { m.minusMonths(it) } }.distinct()
+            val rates = subscriptionCalculator.resolveRates(planned.subscriptions, rateMonths)
             val today = LocalDate.now()
             val adjustmentsByExpenseId = ExpenseAdjustmentRules.groupByExpense(expense.adjustments)
             val preparedExpenses = expense.expenses.map {
@@ -107,6 +109,7 @@ class MonthlyBudgetCalculator @Inject constructor(
                 val computation = computations.getValue(month)
                 val baseline = (CategoryTrendRules.BASELINE_MONTHS downTo 1)
                     .map { computations.getValue(month.minusMonths(it.toLong())).summary }
+                val calendarMonthExpenses = preparedExpenses.filter { it.calendarMonth == month }.map { it.expense }
                 computation.summary.copy(
                     warnings = BudgetWarningRules.build(
                         month = month,
@@ -115,7 +118,14 @@ class MonthlyBudgetCalculator @Inject constructor(
                         categorySummaries = computation.summary.categorySummaries,
                         cardPayments = computation.cardPayments,
                         loanPayments = computation.loanPayments,
-                        categorySpikes = CategoryTrendRules.detectSpikes(computation.summary, baseline)
+                        categorySpikes = CategoryTrendRules.detectSpikes(computation.summary, baseline),
+                        duplicates = AnomalyRules.findDuplicates(calendarMonthExpenses),
+                        subscriptionIncreases = AnomalyRules.findSubscriptionIncreases(
+                            month = month,
+                            subscriptions = planned.subscriptions.subscriptions,
+                            priceHistory = planned.subscriptions.priceHistory
+                        ),
+                        positiveTrends = AnomalyRules.findPositiveTrends(baseline + computation.summary)
                     )
                 )
             }
@@ -139,14 +149,32 @@ class MonthlyBudgetCalculator @Inject constructor(
         val calendarMonthExpenses = preparedExpenses.filter { it.calendarMonth == month }
         val plannedMonthExpenses = preparedExpenses.filter { it.planningMonth == month }
 
-        val subscriptions = subscriptionCalculator.calculatePayments(
-            month = month,
-            inputs = planned.subscriptions,
-            monthExpenses = calendarMonthExpenses.map { it.expense },
-            rates = rates
-        )
-        val loans = loanCalculator.calculatePayments(month, planned.loans.loans, planned.loans.payments)
-        val fixedExpenses = fixedExpenseCalculator.calculatePayments(month, planned.fixedExpenses)
+        // Planned payments belong to the month their money leaves: a card-paid subscription, loan
+        // or fixed expense is due with the statement, like a card purchase. So the planned items
+        // of [month] come from the calendar months whose payment lands in it. "Already processed"
+        // is decided in the item's own calendar month, where its linked expense is dated.
+        val sourceMonths = (MAX_PLANNING_MONTH_SHIFT downTo 0L).map { month.minusMonths(it) }
+        fun calendarExpenses(source: YearMonth) = preparedExpenses.filter { it.calendarMonth == source }
+        fun lands(source: YearMonth, day: Int, account: PaymentAccount?) =
+            planningMonthFor(source.atDay(day.coerceIn(1, source.lengthOfMonth())), account, expense.statementRules) == month
+
+        val subscriptions = sourceMonths.flatMap { source ->
+            subscriptionCalculator.calculatePayments(
+                month = source,
+                inputs = planned.subscriptions,
+                monthExpenses = calendarExpenses(source).map { it.expense },
+                rates = rates
+            ).filter { lands(source, it.billingDay, it.account) }
+        }
+        val loans = sourceMonths.flatMap { source ->
+            loanCalculator.calculatePayments(source, planned.loans.loans, planned.loans.payments)
+                .filter { lands(source, it.paymentDay, it.account) }
+        }
+        val fixedExpenses = sourceMonths.flatMap { source ->
+            val processedIds = calendarExpenses(source).mapNotNull { it.expense.fixedExpenseId }.toSet()
+            fixedExpenseCalculator.calculatePayments(source, planned.fixedExpenses)
+                .filter { it.fixedExpenseId !in processedIds && lands(source, it.dayOfMonth, it.account) }
+        }
 
         val totalExpenses = plannedMonthExpenses.sumOf { it.netAmount }
         val totalCardExpense = calendarMonthExpenses
@@ -165,10 +193,16 @@ class MonthlyBudgetCalculator @Inject constructor(
             .sumOf { it.netAmount }
         val totalSubscriptionsPlanned = subscriptions.sumOf { it.amount }
         val totalLoans = loans.sumOf { it.amount }
-        val paidFixedExpenseIds = plannedMonthExpenses.mapNotNull { it.expense.fixedExpenseId }.toSet()
-        val totalFixedExpenses = fixedExpenses
-            .filter { it.fixedExpenseId !in paidFixedExpenseIds }
-            .sumOf { it.amount }
+        val totalFixedExpenses = fixedExpenses.sumOf { it.amount }
+        val essentialPaid = plannedMonthExpenses
+            .filter { it.expense.isEssential() }
+            .sumOf { it.netAmount }
+        val variableExpenses = plannedMonthExpenses
+            .filter {
+                it.expense.subscriptionId == null && it.expense.loanId == null &&
+                    it.expense.fixedExpenseId == null && it.expense.installmentGroupId == null
+            }
+            .sumOf { it.netAmount }
         val suggestedSaving = ((applicableSalary + additionalIncomeAmount - totalExpenses - totalSubscriptionsUnpaid - totalLoans - totalFixedExpenses) / 2)
             .coerceAtLeast(0L)
 
@@ -188,8 +222,15 @@ class MonthlyBudgetCalculator @Inject constructor(
             loanPaymentAmount = totalLoans,
             fixedExpenseAmount = totalFixedExpenses,
             suggestedSavingAmount = suggestedSaving,
+            essentialExpenseAmount = essentialPaid + totalSubscriptionsUnpaid + totalLoans + totalFixedExpenses,
+            variableExpenseAmount = variableExpenses,
+            subscriptionPayments = subscriptions,
+            loanPayments = loans,
+            fixedExpensePayments = fixedExpenses,
+            // Budgets answer "what did I spend this month", so categories use the day of the
+            // purchase, not the month its card statement is paid.
             categorySummaries = buildCategorySummaries(
-                plannedMonthExpenses = plannedMonthExpenses,
+                monthExpenses = calendarMonthExpenses,
                 budgets = expense.budgets.filter { it.yearMonth == month }
             )
         )
@@ -218,10 +259,10 @@ class MonthlyBudgetCalculator @Inject constructor(
 }
 
 private fun buildCategorySummaries(
-    plannedMonthExpenses: List<PreparedExpense>,
+    monthExpenses: List<PreparedExpense>,
     budgets: List<CategoryBudget>
 ): List<CategorySummary> {
-    val expensesByCategory = plannedMonthExpenses.groupBy { it.expense.categoryId }
+    val expensesByCategory = monthExpenses.groupBy { it.expense.categoryId }
     val budgetsByCategory = budgets.associateBy { it.categoryId }
     val categoryIds = (expensesByCategory.keys + budgetsByCategory.keys).toSortedSet()
 
@@ -276,12 +317,23 @@ private fun buildCardPaymentsDue(
         }
 }
 
-private fun Expense.planningMonth(statementRules: List<CreditCardStatementRule>): YearMonth {
-    if (paymentSourceType != AccountType.CREDIT_CARD) {
-        return YearMonth.from(expenseDate)
-    }
+/** Category names whose spending counts as an obligation for the emergency-fund estimate. */
+private val ESSENTIAL_CATEGORY_NAMES = setOf("Kira", "Fatura", "Aidat")
 
-    val account = account ?: return YearMonth.from(expenseDate)
+private fun Expense.isEssential(): Boolean =
+    subscriptionId != null || loanId != null || fixedExpenseId != null || installmentGroupId != null ||
+        category?.name in ESSENTIAL_CATEGORY_NAMES
+
+private fun Expense.planningMonth(statementRules: List<CreditCardStatementRule>): YearMonth =
+    if (paymentSourceType != AccountType.CREDIT_CARD) YearMonth.from(expenseDate) else planningMonthFor(expenseDate, account, statementRules)
+
+/** Month whose card statement pays a charge on [expenseDate]; the calendar month for other accounts. */
+internal fun planningMonthFor(
+    expenseDate: LocalDate,
+    account: PaymentAccount?,
+    statementRules: List<CreditCardStatementRule>
+): YearMonth {
+    if (account == null || account.type != AccountType.CREDIT_CARD) return YearMonth.from(expenseDate)
     val expenseMonth = YearMonth.from(expenseDate)
     val statementRule = statementRules.effectiveFor(account.id, expenseMonth)
     val statementDay = statementRule?.statementDay ?: account.statementDay ?: return expenseMonth
@@ -302,7 +354,7 @@ private fun Expense.planningMonth(statementRules: List<CreditCardStatementRule>)
     }
 }
 
-private fun List<CreditCardStatementRule>.effectiveFor(
+internal fun List<CreditCardStatementRule>.effectiveFor(
     accountId: Long,
     month: YearMonth
 ): CreditCardStatementRule? {

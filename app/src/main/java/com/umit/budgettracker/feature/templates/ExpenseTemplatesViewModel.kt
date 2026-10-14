@@ -18,8 +18,8 @@ import javax.inject.Inject
 @HiltViewModel
 class ExpenseTemplatesViewModel @Inject constructor(
     private val repository: ExpenseTemplateRepository,
-    private val categoryRepository: CategoryRepository,
-    private val accountRepository: PaymentAccountRepository
+    categoryRepository: CategoryRepository,
+    accountRepository: PaymentAccountRepository
 ) : ViewModel() {
 
     val templates: StateFlow<List<ExpenseTemplate>> = repository.observeActiveTemplates()
@@ -31,19 +31,11 @@ class ExpenseTemplatesViewModel @Inject constructor(
     val accounts: StateFlow<List<PaymentAccount>> = accountRepository.observeActiveAccounts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun addTemplate(title: String, amount: Long?, categoryId: Long, accountId: Long?) {
-        viewModelScope.launch {
-            repository.upsertTemplate(
-                ExpenseTemplate(
-                    id = 0,
-                    title = title,
-                    defaultAmount = amount,
-                    categoryId = categoryId,
-                    paymentAccountId = accountId,
-                    note = null,
-                    isActive = true
-                )
-            )
-        }
+    fun save(template: ExpenseTemplate) {
+        viewModelScope.launch { repository.upsertTemplate(template) }
+    }
+
+    fun delete(template: ExpenseTemplate) {
+        viewModelScope.launch { repository.deleteTemplate(template.id) }
     }
 }

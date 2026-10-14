@@ -1,5 +1,10 @@
 package com.umit.budgettracker.feature.dashboard
 
+import com.umit.budgettracker.core.ui.components.AmountField
+import com.umit.budgettracker.core.ui.components.MoneyInput
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,7 +33,6 @@ import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -65,6 +69,18 @@ import com.umit.budgettracker.core.domain.model.DebtType
 import com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary
 import com.umit.budgettracker.core.domain.model.SalaryRule
 import com.umit.budgettracker.core.navigation.Screen
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.filled.Diamond
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.MarkEmailUnread
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import com.umit.budgettracker.core.domain.model.CashForecast
+import com.umit.budgettracker.core.domain.model.EmergencyFundStatus
+import com.umit.budgettracker.core.domain.usecase.CashForecastUseCase
 import com.umit.budgettracker.core.navigation.navigateToTopLevelDestination
 import com.umit.budgettracker.core.ui.IconMapper
 import com.umit.budgettracker.core.ui.components.FinanceCard
@@ -150,6 +166,20 @@ fun DashboardScreen(
                     }
 
                     item {
+                        QuickActionsRow(
+                            draftCount = state.extras.draftCount,
+                            onNavigate = { navController.navigate(it) }
+                        )
+                    }
+
+                    val forecast = state.extras.cashForecast
+                    if (selectedMonth == YearMonth.now() && forecast != null && forecast.shortfall > 0L) {
+                        item {
+                            CashWarningCard(forecast) { navController.navigate(Screen.CashFlow.route) }
+                        }
+                    }
+
+                    item {
                         IncomeManagementCard(
                             selectedMonth = selectedMonth,
                             summary = summary,
@@ -164,13 +194,15 @@ fun DashboardScreen(
                         )
                     }
 
-                    if (summary.warnings.isNotEmpty()) {
+                    val alerts = summary.warnings.filter { !it.isPositive }
+                    val goodNews = summary.warnings.filter { it.isPositive }
+                    if (alerts.isNotEmpty()) {
                         item {
-                            InsightCard(summary.warnings.first())
+                            InsightCard(alerts)
                         }
                     } else {
                         item {
-                            PositiveInsightCard(summary, state.previousSummary)
+                            PositiveInsightCard(summary, state.previousSummary, goodNews.firstOrNull()?.message)
                         }
                     }
 
@@ -219,6 +251,15 @@ fun DashboardScreen(
                             onApplySuggestion = {
                                 viewModel.applySuggestedSaving(summary.suggestedSavingAmount)
                             }
+                        )
+                    }
+
+                    item {
+                        WealthCard(
+                            extras = state.extras,
+                            emergency = state.emergency,
+                            onOpenAssets = { navController.navigate(Screen.Assets.route) },
+                            onOpenGoals = { navController.navigate(Screen.Goals.route) }
                         )
                     }
 
@@ -377,6 +418,7 @@ private fun IncomeManagementRow(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BalanceHeroCard(
     summary: MonthlyBudgetSummary,
@@ -432,9 +474,12 @@ private fun BalanceHeroCard(
                 color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f)
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f))
-            Row(
+            // FlowRow: with large fonts the three amounts move to a second line instead of
+            // running into each other.
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 HeroMetric("Gelir", MoneyFormatter.format(summary.totalIncomeAmount))
                 HeroMetric("Harcama", MoneyFormatter.format(summary.totalExpenseAmount))
@@ -446,7 +491,7 @@ private fun BalanceHeroCard(
 
 @Composable
 private fun HeroMetric(label: String, value: String) {
-    Column {
+    Column(Modifier.padding(end = 12.dp)) {
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
@@ -495,10 +540,14 @@ private inline fun MonthlyBudgetSummary.rateOfIncome(amount: (MonthlyBudgetSumma
 }
 
 @Composable
-private fun InsightCard(warning: BudgetWarning) {
-    FinanceCard(containerColor = MaterialTheme.colorScheme.errorContainer) {
+private fun InsightCard(warnings: List<BudgetWarning>) {
+    var expanded by remember(warnings) { mutableStateOf(false) }
+    FinanceCard(
+        containerColor = MaterialTheme.colorScheme.errorContainer,
+        modifier = Modifier.clickable(enabled = warnings.size > 1) { expanded = !expanded }
+    ) {
         Row(
-            Modifier.padding(16.dp),
+            Modifier.padding(16.dp).animateContentSize(),
             verticalAlignment = Alignment.Top
         ) {
             Icon(
@@ -508,11 +557,111 @@ private fun InsightCard(warning: BudgetWarning) {
                 modifier = Modifier.size(21.dp)
             )
             Spacer(Modifier.width(12.dp))
-            Column {
+            Column(Modifier.weight(1f)) {
                 Text("Bu ay dikkat et", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(3.dp))
-                Text(warning.message, style = MaterialTheme.typography.bodySmall)
+                Text(warnings.first().message, style = MaterialTheme.typography.bodySmall)
+                if (expanded) {
+                    warnings.drop(1).forEach { warning ->
+                        Spacer(Modifier.height(6.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.error.copy(alpha = 0.15f))
+                        Spacer(Modifier.height(6.dp))
+                        Text(warning.message, style = MaterialTheme.typography.bodySmall)
+                    }
+                } else if (warnings.size > 1) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "+${warnings.size - 1} uyarı daha · görmek için dokun",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun QuickActionsRow(draftCount: Int, onNavigate: (String) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (draftCount > 0) {
+            AssistChip(
+                onClick = { onNavigate(Screen.Insights.route) },
+                label = { Text("$draftCount taslak onay bekliyor") },
+                leadingIcon = { Icon(Icons.Default.MarkEmailUnread, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+            )
+        }
+        listOf(Screen.QuickAdd to "Hızlı ekle", Screen.ReceiptScan to "Fiş tara", Screen.Assets to "Varlıklar", Screen.Goals to "Hedefler", Screen.Simulation to "Senaryo").forEach { (screen, label) ->
+            AssistChip(
+                onClick = { onNavigate(if (screen == Screen.QuickAdd) Screen.QuickAdd.create() else screen.route) },
+                label = { Text(label) },
+                leadingIcon = { Icon(screen.icon, contentDescription = null, modifier = Modifier.size(18.dp)) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CashWarningCard(forecast: CashForecast, onClick: () -> Unit) {
+    FinanceCard(
+        containerColor = MaterialTheme.colorScheme.errorContainer,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+            Icon(Icons.Default.Insights, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(21.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Nakit açığı riski", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(3.dp))
+                Text(CashForecastUseCase.describe(forecast).orEmpty(), style = MaterialTheme.typography.bodySmall)
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = "Nakit akışı", tint = MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
+@Composable
+private fun WealthCard(
+    extras: DashboardExtras,
+    emergency: EmergencyFundStatus,
+    onOpenAssets: () -> Unit,
+    onOpenGoals: () -> Unit
+) {
+    FinanceCard {
+        Column(Modifier.padding(vertical = 6.dp)) {
+            Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+                Text("Varlık ve birikim", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Altın, döviz, fon, mevduat ve hedeflerin",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IncomeManagementRow(
+                title = "Toplam varlık",
+                amount = extras.portfolioValue,
+                supportingText = if (extras.hasAssets) {
+                    emergency.coveredMonthsTenths?.let { "Acil fon ${it / 10},${it % 10} ay yeter · hedef ${emergency.targetMonths} ay" }
+                        ?: "Acil fon: ${MoneyFormatter.format(extras.emergencyFundValue)}"
+                } else "Henüz varlık eklenmedi",
+                icon = Icons.Default.Diamond,
+                onClick = onOpenAssets
+            )
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 18.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            val goal = extras.topGoal
+            IncomeManagementRow(
+                title = goal?.goal?.name ?: "Birikim hedefleri",
+                amount = goal?.savedAmount ?: 0L,
+                supportingText = goal?.let { progress ->
+                    "%${progress.percent} · " + (progress.requiredMonthly?.let { "ayda ${MoneyFormatter.format(it)} ayırmalısın" } ?: "kalan ${MoneyFormatter.format(progress.remainingAmount)}")
+                } ?: "Tatil, araba, ev… bir hedef oluştur",
+                icon = Icons.Default.Flag,
+                onClick = onOpenGoals
+            )
         }
     }
 }
@@ -520,7 +669,8 @@ private fun InsightCard(warning: BudgetWarning) {
 @Composable
 private fun PositiveInsightCard(
     summary: MonthlyBudgetSummary,
-    previousSummary: MonthlyBudgetSummary
+    previousSummary: MonthlyBudgetSummary,
+    trendMessage: String? = null
 ) {
     val diff = summary.totalExpenseAmount - previousSummary.totalExpenseAmount
     FinanceCard(containerColor = MaterialTheme.colorScheme.primaryContainer) {
@@ -537,6 +687,7 @@ private fun PositiveInsightCard(
                 Spacer(Modifier.height(3.dp))
                 Text(
                     when {
+                        trendMessage != null -> trendMessage
                         previousSummary.totalExpenseAmount == 0L ->
                             "Harcama düzenin oluştukça burada karşılaştırmalı sonuçlar göreceksin."
                         diff <= 0L ->
@@ -798,19 +949,13 @@ fun SavingGoalDialog(
     onDismiss: () -> Unit,
     onConfirm: (Long) -> Unit
 ) {
-    var amountText by remember { mutableStateOf((currentAmount / 100).toString()) }
+    var amountText by remember { mutableStateOf(MoneyInput.format(currentAmount)) }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Birikim hedefi") },
         text = {
-            OutlinedTextField(
-                value = amountText,
-                onValueChange = { amountText = it },
-                label = { Text("Hedef tutar (TL)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+            AmountField(value = amountText, onValueChange = { amountText = it }, label = "Hedef tutar", modifier = Modifier.fillMaxWidth())
         },
         confirmButton = {
             Button(onClick = {

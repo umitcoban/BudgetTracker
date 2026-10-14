@@ -1,5 +1,7 @@
 package com.umit.budgettracker.feature.settings
 
+import com.umit.budgettracker.core.ui.components.DetailScaffold
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,18 +32,11 @@ fun CategoriesScreen(
         viewModel.message.collect { snackbarHostState.showSnackbar(it) }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Kategoriler") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
-                    }
-                }
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+    DetailScaffold(
+        title = "Kategoriler",
+        subtitle = "Harcama kategorileri ve renkleri",
+        onBack = onBack,
+        snackbarHostState = snackbarHostState,
         floatingActionButton = {
             FloatingActionButton(onClick = { editingCategory = Category(0, "", IconMapper.allIconNames.first(), 0xFF9E9E9E.toInt(), CategoryType.EXPENSE, false, true, 0) }) {
                 Icon(Icons.Default.Add, contentDescription = "Ekle")
@@ -49,7 +44,8 @@ fun CategoriesScreen(
         }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding)
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(bottom = 96.dp)
         ) {
             if (categories.isEmpty()) {
                 item {
@@ -124,7 +120,7 @@ fun CategoryDialog(
     var typeExpanded by remember { mutableStateOf(false) }
     val isValid = name.isNotBlank() && selectedIcon.isNotBlank()
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (category.id == 0L) "Yeni Kategori" else "Kategoriyi Düzenle") },
         text = {

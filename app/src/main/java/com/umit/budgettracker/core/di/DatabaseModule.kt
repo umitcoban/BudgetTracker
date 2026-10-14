@@ -9,6 +9,8 @@ import com.umit.budgettracker.core.database.AppDatabase
 import com.umit.budgettracker.core.database.dao.*
 import com.umit.budgettracker.core.database.entity.CategoryEntity
 import com.umit.budgettracker.core.database.entity.PaymentAccountEntity
+import com.umit.budgettracker.core.database.mapper.toEntity
+import com.umit.budgettracker.core.domain.calculator.InflationRules
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -29,7 +31,8 @@ object DatabaseModule {
     fun provideAppDatabase(
         @ApplicationContext context: Context,
         provider: Provider<CategoryDao>,
-        accountProvider: Provider<PaymentAccountDao>
+        accountProvider: Provider<PaymentAccountDao>,
+        inflationProvider: Provider<InflationRateDao>
     ): AppDatabase {
         return Room.databaseBuilder(
             context,
@@ -42,6 +45,7 @@ object DatabaseModule {
                 CoroutineScope(Dispatchers.IO).launch {
                     seedCategories(provider.get())
                     seedAccounts(accountProvider.get())
+                    seedInflation(inflationProvider.get())
                 }
             }
         }).build()
@@ -52,7 +56,7 @@ object DatabaseModule {
         arrayOf(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
             MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16
+            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17
         )
     }
 
@@ -238,6 +242,44 @@ object DatabaseModule {
         }
     }
 
+    /**
+     * Adds the planning tables (inflation, assets, market prices, price alerts, savings goals and
+     * contributions, planned large expenses, public holidays, merchant rules, dismissed
+     * suggestions, notification drafts). Only new tables: existing rows are untouched. The CPI
+     * seed is inserted with INSERT OR IGNORE so it can never overwrite user data.
+     */
+    private val MIGRATION_16_17 = object : Migration(16, 17) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            MIGRATION_16_17_SQL.forEach { db.execSQL(it) }
+            val now = System.currentTimeMillis()
+            InflationRules.SEED.forEach { rate ->
+                db.execSQL(
+                    "INSERT OR IGNORE INTO `inflation_rates` (`month`, `monthlyRateBp`, `annualRateBp`, `note`, `source`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?)",
+                    arrayOf<Any?>(rate.month.toString(), rate.monthlyRateBp, rate.annualRateBp, rate.note, rate.source, now)
+                )
+            }
+        }
+    }
+
+    private val MIGRATION_16_17_SQL = listOf(
+        "CREATE TABLE IF NOT EXISTS `inflation_rates` (`month` TEXT NOT NULL, `monthlyRateBp` INTEGER NOT NULL, `annualRateBp` INTEGER, `note` TEXT, `source` TEXT, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`month`))",
+        "CREATE TABLE IF NOT EXISTS `assets` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `priceCode` TEXT, `quantity` INTEGER NOT NULL, `manualValue` INTEGER, `costAmount` INTEGER, `allocationTag` TEXT, `interestRateBp` INTEGER, `startDate` INTEGER, `maturityDate` INTEGER, `isEmergencyFund` INTEGER NOT NULL, `isActive` INTEGER NOT NULL, `note` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL)",
+        "CREATE INDEX IF NOT EXISTS `index_assets_priceCode` ON `assets` (`priceCode`)",
+        "CREATE TABLE IF NOT EXISTS `market_prices` (`code` TEXT NOT NULL, `name` TEXT NOT NULL, `price` INTEGER NOT NULL, `previousPrice` INTEGER, `source` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`code`))",
+        "CREATE TABLE IF NOT EXISTS `price_alerts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `priceCode` TEXT NOT NULL, `condition` TEXT NOT NULL, `threshold` INTEGER NOT NULL, `isActive` INTEGER NOT NULL, `lastTriggeredAt` INTEGER, `note` TEXT)",
+        "CREATE INDEX IF NOT EXISTS `index_price_alerts_priceCode` ON `price_alerts` (`priceCode`)",
+        "CREATE TABLE IF NOT EXISTS `savings_goals` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `targetAmount` INTEGER NOT NULL, `targetMonth` TEXT, `priority` INTEGER NOT NULL, `iconName` TEXT NOT NULL, `linkedAssetId` INTEGER, `isActive` INTEGER NOT NULL, `note` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS `goal_contributions` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `goalId` INTEGER NOT NULL, `amount` INTEGER NOT NULL, `date` INTEGER NOT NULL, `note` TEXT, `createdAt` INTEGER NOT NULL)",
+        "CREATE INDEX IF NOT EXISTS `index_goal_contributions_goalId` ON `goal_contributions` (`goalId`)",
+        "CREATE TABLE IF NOT EXISTS `planned_expenses` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `title` TEXT NOT NULL, `amount` INTEGER NOT NULL, `dueDate` INTEGER NOT NULL, `categoryId` INTEGER, `savedAmount` INTEGER NOT NULL, `isYearly` INTEGER NOT NULL, `isCompleted` INTEGER NOT NULL, `note` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL)",
+        "CREATE INDEX IF NOT EXISTS `index_planned_expenses_dueDate` ON `planned_expenses` (`dueDate`)",
+        "CREATE TABLE IF NOT EXISTS `public_holidays` (`date` INTEGER NOT NULL, `name` TEXT NOT NULL, PRIMARY KEY(`date`))",
+        "CREATE TABLE IF NOT EXISTS `merchant_rules` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `pattern` TEXT NOT NULL, `categoryId` INTEGER NOT NULL, `hitCount` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS `index_merchant_rules_pattern` ON `merchant_rules` (`pattern`)",
+        "CREATE TABLE IF NOT EXISTS `dismissed_suggestions` (`key` TEXT NOT NULL, `dismissedAt` INTEGER NOT NULL, PRIMARY KEY(`key`))",
+        "CREATE TABLE IF NOT EXISTS `expense_drafts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `title` TEXT NOT NULL, `amount` INTEGER NOT NULL, `date` INTEGER NOT NULL, `sourceLabel` TEXT NOT NULL, `createdAt` INTEGER NOT NULL)"
+    )
+
     private val MIGRATION_3_4 = object : Migration(3, 4) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL(
@@ -299,6 +341,10 @@ object DatabaseModule {
             CategoryEntity(name = "Diğer", iconName = "more_horiz", colorValue = 0xFF9E9E9E.toInt(), type = "EXPENSE", isDefault = true)
         )
         dao.insertAll(categories)
+    }
+
+    private suspend fun seedInflation(dao: InflationRateDao) {
+        dao.insertAllIfMissing(InflationRules.SEED.map { it.toEntity() })
     }
 
     private suspend fun seedAccounts(dao: PaymentAccountDao) {
@@ -366,4 +412,22 @@ object DatabaseModule {
 
     @Provides
     fun provideCreditCardStatementRuleDao(db: AppDatabase): CreditCardStatementRuleDao = db.creditCardStatementRuleDao()
+
+    @Provides
+    fun provideInflationRateDao(db: AppDatabase): InflationRateDao = db.inflationRateDao()
+
+    @Provides
+    fun provideAssetDao(db: AppDatabase): AssetDao = db.assetDao()
+
+    @Provides
+    fun provideSavingsGoalDao(db: AppDatabase): SavingsGoalDao = db.savingsGoalDao()
+
+    @Provides
+    fun providePlannedExpenseDao(db: AppDatabase): PlannedExpenseDao = db.plannedExpenseDao()
+
+    @Provides
+    fun providePublicHolidayDao(db: AppDatabase): PublicHolidayDao = db.publicHolidayDao()
+
+    @Provides
+    fun provideAssistantDao(db: AppDatabase): AssistantDao = db.assistantDao()
 }

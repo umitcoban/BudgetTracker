@@ -1,5 +1,8 @@
 package com.umit.budgettracker.feature.cards
 
+import com.umit.budgettracker.core.ui.components.DateField
+import com.umit.budgettracker.core.ui.components.MonthField
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,7 +28,6 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -456,7 +458,7 @@ private fun StatementDatesDialog(
     val parsedDueDay = dueDay.toIntOrNull()
     val valid = parsedMonth != null && parsedStatementDay in 1..31 && parsedDueDay in 1..31
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Ekstre tarihleri · ${account.name}") },
         text = {
@@ -480,12 +482,7 @@ private fun StatementDatesDialog(
                     },
                     style = MaterialTheme.typography.bodySmall
                 )
-                OutlinedTextField(
-                    effectiveMonth,
-                    { effectiveMonth = it },
-                    label = { Text("Geçerlilik ayı (YYYY-MM)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                MonthField(label = "Geçerlilik ayı", value = runCatching { java.time.YearMonth.parse(effectiveMonth) }.getOrNull(), onChange = { effectiveMonth = it?.toString().orEmpty() }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     statementDay,
                     { statementDay = it },
@@ -530,7 +527,7 @@ fun AddCreditCardDialog(
         statementDay.toIntOrNull() in 1..31 &&
         dueDay.toIntOrNull() in 1..31
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Yeni kredi kartı") },
         text = {

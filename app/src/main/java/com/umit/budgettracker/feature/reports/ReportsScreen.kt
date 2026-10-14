@@ -1,5 +1,7 @@
 package com.umit.budgettracker.feature.reports
 
+import com.umit.budgettracker.core.ui.charts.LineComparisonChart
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -123,16 +125,18 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                     Spacer(Modifier.height(8.dp))
-                    PrimaryTabRow(
+                    // Scrollable: with large fonts the fixed-width tabs broke "Harcamalar" in two.
+                    PrimaryScrollableTabRow(
                         selectedTabIndex = selectedTab,
                         containerColor = MaterialTheme.colorScheme.background,
+                        edgePadding = 0.dp,
                         divider = {}
                     ) {
                         reportTabs.forEachIndexed { index, title ->
                             Tab(
                                 selected = selectedTab == index,
                                 onClick = { selectedTab = index },
-                                text = { Text(title, style = MaterialTheme.typography.labelLarge) }
+                                text = { Text(title, style = MaterialTheme.typography.labelLarge, maxLines = 1) }
                             )
                         }
                     }
@@ -562,75 +566,14 @@ private fun TrendChartCard(trend: List<MonthlyTrendPoint>) {
                 }
             }
             Spacer(Modifier.height(18.dp))
-            Canvas(
-                Modifier
-                    .fillMaxWidth()
-                    .height(150.dp)
-                    .pointerInput(trend) {
-                        detectTapGestures { tap ->
-                            if (trend.size < 2) return@detectTapGestures
-                            val stepX = size.width / (trend.size - 1)
-                            val index = ((tap.x + stepX / 2f) / stepX).toInt().coerceIn(0, trend.lastIndex)
-                            selected = index.takeIf { it != selected }
-                        }
-                    }
-            ) {
-                if (trend.size < 2) return@Canvas
-                val stepX = size.width / (trend.size - 1)
-                val usableHeight = size.height - 12.dp.toPx()
-
-                fun yFor(amount: Long): Float = usableHeight - (amount.toFloat() / maxAmount.toFloat() * usableHeight)
-
-                fun buildPath(amount: (MonthlyTrendPoint) -> Long): Path {
-                    val path = Path()
-                    trend.forEachIndexed { index, point ->
-                        val x = stepX * index
-                        val y = yFor(amount(point))
-                        if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                    }
-                    return path
-                }
-
-                drawLine(
-                    color = Color.Gray.copy(alpha = 0.2f),
-                    start = Offset(0f, usableHeight),
-                    end = Offset(size.width, usableHeight),
-                    strokeWidth = 1.dp.toPx()
-                )
-                selected?.let { index ->
-                    val x = stepX * index
-                    drawLine(crosshairColor, Offset(x, 0f), Offset(x, usableHeight), strokeWidth = 1.dp.toPx())
-                }
-                drawPath(
-                    buildPath { it.incomeAmount },
-                    color = incomeColor,
-                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
-                )
-                drawPath(
-                    buildPath { it.expenseAmount },
-                    color = expenseColor,
-                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
-                )
-                trend.forEachIndexed { index, point ->
-                    val x = stepX * index
-                    val isSelected = index == selected
-                    val radius = if (isSelected) 5.dp.toPx() else 4.dp.toPx()
-                    // 2dp surface ring so overlapping markers stay separable
-                    drawCircle(surfaceColor, radius + 2.dp.toPx(), Offset(x, yFor(point.incomeAmount)))
-                    drawCircle(incomeColor, radius, Offset(x, yFor(point.incomeAmount)))
-                    drawCircle(surfaceColor, radius + 2.dp.toPx(), Offset(x, yFor(point.expenseAmount)))
-                    drawCircle(expenseColor, radius, Offset(x, yFor(point.expenseAmount)))
-                }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                trend.forEach {
-                    Text(
-                        DateUtils.formatMonthYear(it.month).take(3),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            LineComparisonChart(
+                series = listOf(trend.map { it.incomeAmount }, trend.map { it.expenseAmount }),
+                colors = listOf(incomeColor, expenseColor),
+                labels = trend.map { DateUtils.formatMonthYear(it.month).take(3) },
+                selectedIndex = selected,
+                onSelect = { selected = it },
+                height = 170.dp
+            )
         }
     }
 }
@@ -921,3 +864,4 @@ private fun CategoryReportRow(
         }
     }
 }
+

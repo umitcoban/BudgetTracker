@@ -1,5 +1,10 @@
 package com.umit.budgettracker.feature.income
 
+import com.umit.budgettracker.core.ui.components.AmountField
+import com.umit.budgettracker.core.ui.components.DetailScaffold
+import com.umit.budgettracker.core.ui.components.DateField
+import com.umit.budgettracker.core.ui.components.MonthField
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +23,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -70,29 +74,10 @@ fun IncomeScreen(
     var editingIncome by remember { mutableStateOf<Income?>(null) }
     var showDialog by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Ek Gelirler", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "Yalnızca işlem ayını etkileyen gelirler",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Özete dön"
-                        )
-                    }
-                }
-            )
-        },
+    DetailScaffold(
+        title = "Ek Gelirler",
+        subtitle = "Yalnızca işlem ayını etkileyen gelirler",
+        onBack = onBack,
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
@@ -257,7 +242,7 @@ private fun IncomeRow(
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Geliri Sil") },
             text = { Text("Bu gelir kaydını silmek istediğinizden emin misiniz?") },
@@ -332,7 +317,7 @@ private fun IncomeDialog(
     val incomeDate = runCatching { LocalDate.parse(incomeDateText, dateFormatter) }.getOrNull()
     val isValid = title.isNotBlank() && (amount ?: 0L) > 0 && incomeDate != null
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (existingIncome == null) "Gelir Ekle" else "Geliri Düzenle") },
         text = {
@@ -343,18 +328,8 @@ private fun IncomeDialog(
                     label = { Text("Başlık") },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = it },
-                    label = { Text("Tutar (TL)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = incomeDateText,
-                    onValueChange = { incomeDateText = it },
-                    label = { Text("Gelirin alındığı tarih (YYYY-MM-DD)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                AmountField(value = amountText, onValueChange = { amountText = it }, label = "Tutar", modifier = Modifier.fillMaxWidth())
+                DateField(label = "Gelirin alındığı tarih", value = incomeDate, onChange = { incomeDateText = it.format(dateFormatter) }, modifier = Modifier.fillMaxWidth())
                 ExposedDropdownMenuBox(
                     expanded = typeExpanded,
                     onExpandedChange = { typeExpanded = !typeExpanded }

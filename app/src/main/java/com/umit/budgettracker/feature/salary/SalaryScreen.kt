@@ -1,5 +1,10 @@
 package com.umit.budgettracker.feature.salary
 
+import com.umit.budgettracker.core.ui.components.AmountField
+import com.umit.budgettracker.core.ui.components.DetailScaffold
+import com.umit.budgettracker.core.ui.components.DateField
+import com.umit.budgettracker.core.ui.components.MonthField
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,26 +36,10 @@ fun SalaryScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<SalaryRule?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Maaş Planı", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "Düzenli aylık gelirin",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
-                    }
-                }
-            )
-        },
+    DetailScaffold(
+        title = "Maaş Planı",
+        subtitle = "Düzenli aylık gelirin",
+        onBack = onBack,
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
                 Icon(Icons.Default.Add, contentDescription = "Maaşı güncelle")
@@ -64,7 +53,7 @@ fun SalaryScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
@@ -166,13 +155,13 @@ fun SalaryRuleDialog(
     val payDayValid = payDayText.isBlank() || payDay in 1..31
     val isValid = (amount ?: 0L) > 0 && month != null && payDayValid
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (existingRule == null) "Maaşı Güncelle" else "Maaş Kuralını Düzenle") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = amountText, onValueChange = { amountText = it }, label = { Text("Miktar (TL)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = monthText, onValueChange = { monthText = it }, label = { Text("Geçerli olacağı ay (YYYY-MM)") }, modifier = Modifier.fillMaxWidth())
+                AmountField(value = amountText, onValueChange = { amountText = it }, label = "Aylık net maaş", modifier = Modifier.fillMaxWidth())
+                MonthField(label = "Geçerli olacağı ay", value = runCatching { java.time.YearMonth.parse(monthText) }.getOrNull(), onChange = { monthText = it?.toString().orEmpty() }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = payDayText,
                     onValueChange = { payDayText = it },

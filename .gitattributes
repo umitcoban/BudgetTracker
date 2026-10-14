@@ -1,0 +1,2 @@
+# Data-source fixtures are verbatim server responses (CRLF, trailing spaces); keep them byte-for-byte.
+app/src/test/resources/datasources/** -text -whitespace

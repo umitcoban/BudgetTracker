@@ -11,6 +11,7 @@ object DateUtils {
     private val dayMonthFormatter = DateTimeFormatter.ofPattern("d MMM", turkishLocale)
     private val dayMonthLongFormatter = DateTimeFormatter.ofPattern("d MMMM", turkishLocale)
     private val dayMonthWeekdayFormatter = DateTimeFormatter.ofPattern("d MMMM, EEEE", turkishLocale)
+    private val fullDateFormatter = DateTimeFormatter.ofPattern("d MMMM yyyy, EEEE", turkishLocale)
 
     fun formatMonthYear(yearMonth: YearMonth): String {
         return yearMonth.format(monthYearFormatter).replaceFirstChar { it.uppercase() }
@@ -29,5 +30,10 @@ object DateUtils {
     /** "12 Ekim, Pazartesi" — calendar-style headers. */
     fun formatDayMonthWeekday(date: LocalDate): String {
         return date.format(dayMonthWeekdayFormatter).replaceFirstChar { it.uppercase() }
+    }
+
+    /** "12 Ekim 2026, Pazartesi" — date pickers in forms. */
+    fun formatFullDate(date: LocalDate): String {
+        return date.format(fullDateFormatter)
     }
 }

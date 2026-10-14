@@ -91,4 +91,28 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindFixedExpenseRepository(impl: FixedExpenseRepositoryImpl): FixedExpenseRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindInflationRepository(impl: InflationRepositoryImpl): InflationRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindAssetRepository(impl: AssetRepositoryImpl): AssetRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSavingsGoalRepository(impl: SavingsGoalRepositoryImpl): SavingsGoalRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindPlannedExpenseRepository(impl: PlannedExpenseRepositoryImpl): PlannedExpenseRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindHolidayRepository(impl: HolidayRepositoryImpl): HolidayRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindAssistantRepository(impl: AssistantRepositoryImpl): AssistantRepository
 }

@@ -8,6 +8,7 @@ import com.umit.budgettracker.core.domain.repository.CategoryBudgetRepository
 import com.umit.budgettracker.core.domain.repository.CategoryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.YearMonth
@@ -49,6 +50,22 @@ class CategoryBudgetsViewModel @Inject constructor(
                     note = null
                 )
             )
+        }
+    }
+
+    fun deleteBudget(budget: CategoryBudget) {
+        viewModelScope.launch { repository.deleteCategoryBudget(budget) }
+    }
+
+    /** Budgets are per month; this carries last month's limits over instead of re-entering them. */
+    fun copyFromPreviousMonth() {
+        viewModelScope.launch {
+            val month = _selectedMonth.value
+            val previous = repository.observeBudgetsForMonth(month.minusMonths(1)).first()
+            val existing = repository.observeBudgetsForMonth(month).first().map { it.categoryId }.toSet()
+            previous.filter { it.categoryId !in existing }.forEach {
+                repository.upsertCategoryBudget(it.copy(id = 0, yearMonth = month))
+            }
         }
     }
 

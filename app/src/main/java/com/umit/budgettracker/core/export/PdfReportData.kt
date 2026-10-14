@@ -1,5 +1,6 @@
 package com.umit.budgettracker.core.export
 
+import com.umit.budgettracker.core.domain.calculator.YearEndReport
 import com.umit.budgettracker.core.domain.model.CategoryTrend
 import com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary
 
@@ -10,7 +11,9 @@ import com.umit.budgettracker.core.domain.model.MonthlyBudgetSummary
 data class PdfReportData(
     val month: MonthlyBudgetSummary,
     val history: List<MonthlyBudgetSummary>,
-    val categoryTrends: List<CategoryTrend>
+    val categoryTrends: List<CategoryTrend>,
+    /** Optional extra page: calendar-year summary with inflation-adjusted comparison. */
+    val yearEnd: YearEndReport? = null
 ) {
     companion object {
         /** Selected month plus the eleven before it. */

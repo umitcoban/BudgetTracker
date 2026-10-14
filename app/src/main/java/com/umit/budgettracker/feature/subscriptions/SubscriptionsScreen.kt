@@ -1,5 +1,14 @@
 package com.umit.budgettracker.feature.subscriptions
 
+import com.umit.budgettracker.core.ui.components.DateField
+import com.umit.budgettracker.core.ui.components.MonthField
+import com.umit.budgettracker.core.domain.model.SubscriptionMonthlyPayment
+import androidx.compose.material.icons.filled.Subscriptions
+import com.umit.budgettracker.core.ui.components.ScreenContentPadding
+import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
+import com.umit.budgettracker.core.ui.components.EmptyState
+import com.umit.budgettracker.core.ui.components.DetailScaffold
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.umit.budgettracker.core.domain.model.*
 import com.umit.budgettracker.core.ui.IconMapper
+import com.umit.budgettracker.core.util.DateUtils
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
 import java.math.BigDecimal
@@ -46,60 +56,65 @@ fun SubscriptionsScreen(
         viewModel.message.collect { snackbarHostState.showSnackbar(it) }
     }
 
-    Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text("Abonelikler") },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
-                        }
-                    }
-                )
-                MonthSelector(
-                    selectedMonth = selectedMonth,
-                    onMonthChange = { viewModel.previousMonth() },
-                    onNextMonth = { viewModel.nextMonth() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
-                )
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+    val toProcess = monthlyPayments.filter { !it.isPaid }
+    val processed = monthlyPayments.filter { it.isPaid }
+
+    @Composable
+    fun PaymentItem(payment: SubscriptionMonthlyPayment) = SubscriptionPaymentRow(
+        payment = payment,
+        selectedMonth = selectedMonth,
+        onMarkPaid = { viewModel.markAsPaid(payment) },
+        onEdit = {
+            editingSub = allSubscriptions.find { it.id == payment.subscriptionId }
+            currentEditAmount = payment.originalAmount ?: payment.amount
+            showDialog = true
+        }
+    )
+
+    DetailScaffold(
+        title = "Abonelikler",
+        subtitle = "Aylık ödemeler ve fiyat geçmişi",
+        onBack = onBack,
+        snackbarHostState = snackbarHostState,
         floatingActionButton = {
-            FloatingActionButton(onClick = { 
+            FloatingActionButton(onClick = {
                 editingSub = null
                 currentEditAmount = null
-                showDialog = true 
+                showDialog = true
             }) {
                 Icon(Icons.Default.Add, contentDescription = "Ekle")
             }
         }
     ) { padding ->
-        if (monthlyPayments.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text(text = "Bu ay için abonelik ödemesi yok.")
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = ScreenContentPadding,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                MonthSelector(
+                    selectedMonth = selectedMonth,
+                    onMonthChange = { viewModel.previousMonth() },
+                    onNextMonth = { viewModel.nextMonth() },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(monthlyPayments) { payment ->
-                    SubscriptionPaymentRow(
-                        payment = payment,
-                        selectedMonth = selectedMonth,
-                        onMarkPaid = { viewModel.markAsPaid(payment) },
-                        onEdit = {
-                            editingSub = allSubscriptions.find { it.id == payment.subscriptionId }
-                            currentEditAmount = payment.originalAmount ?: payment.amount
-                            showDialog = true
-                        }
+            if (monthlyPayments.isEmpty()) {
+                item {
+                    EmptyState(
+                        icon = Icons.Default.Subscriptions,
+                        title = "Bu ay abonelik ödemesi yok",
+                        message = "Aboneliklerini ekle; ödeme günü gelince harcamalara kendiliğinden işlenir."
                     )
                 }
+            }
+            if (toProcess.isNotEmpty()) {
+                item { FinanceSectionHeader(title = "Bu ay ödenecek", subtitle = "${toProcess.size} abonelik · ${MoneyFormatter.format(toProcess.sumOf { it.amount })}") }
+                items(toProcess, key = { it.subscriptionId }) { PaymentItem(it) }
+            }
+            if (processed.isNotEmpty()) {
+                item { FinanceSectionHeader(title = "Harcamalara işlendi", subtitle = "${processed.size} abonelik · ${MoneyFormatter.format(processed.sumOf { it.amount })}") }
+                items(processed, key = { it.subscriptionId }) { PaymentItem(it) }
             }
         }
 
@@ -189,34 +204,42 @@ fun SubscriptionPaymentRow(
             containerColor = if (payment.isPaid) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer
         )
     ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = payment.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                val billingDate = selectedMonth.atDay(payment.billingDay.coerceAtMost(selectedMonth.lengthOfMonth()))
-                Text(text = "Ödeme tarihi: $billingDate • ${payment.category?.name ?: "-"}", style = MaterialTheme.typography.bodySmall)
-                Text(
-                    text = if (payment.isPaid) "Harcamalara işlendi" else "Planlandı",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (payment.isPaid) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
-                )
-                Text(text = MoneyFormatter.format(payment.amount), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                if (payment.originalCurrency != null && payment.originalAmount != null) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = payment.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    val billingDate = selectedMonth.atDay(payment.billingDay.coerceAtMost(selectedMonth.lengthOfMonth()))
                     Text(
-                        text = "${payment.originalAmount.formatMinor()} ${payment.originalCurrency} • Güncel TL karşılığı",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Ödeme: ${DateUtils.formatDayMonth(billingDate)} • ${payment.category?.name ?: "-"}",
+                        style = MaterialTheme.typography.bodySmall
                     )
+                    Text(
+                        text = if (payment.isPaid) "Harcamalara işlendi" else "Planlandı",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (payment.isPaid) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
+                    )
+                    Text(text = MoneyFormatter.format(payment.amount), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    if (payment.originalCurrency != null && payment.originalAmount != null) {
+                        Text(
+                            text = "${payment.originalAmount.formatMinor()} ${payment.originalCurrency} • Güncel TL karşılığı",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (payment.isPaid) {
+                    Icon(Icons.Default.Check, contentDescription = "Ödendi", tint = Color(0xFF4CAF50))
+                }
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Default.Edit, contentDescription = "Düzenle")
                 }
             }
-            if (payment.isPaid) {
-                Icon(Icons.Default.Check, contentDescription = "Ödendi", tint = Color(0xFF4CAF50))
-            } else {
-                Button(onClick = onMarkPaid) {
-                    Text("${selectedMonth} Harcamalara İşle")
+            // The action sits on its own line: next to the title it took the whole width and
+            // squeezed the title to one letter per line.
+            if (!payment.isPaid) {
+                Button(onClick = onMarkPaid, modifier = Modifier.align(Alignment.End).padding(top = 8.dp)) {
+                    Text("Harcamalara işle")
                 }
-            }
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Default.Edit, contentDescription = "Düzenle")
             }
         }
     }
@@ -314,7 +337,8 @@ fun SubscriptionDialog(
             (!priceChanged || ((amount ?: 0L) > 0 && calculatedTryAmount > 0 && month != null))
     }
 
-    AlertDialog(
+    AppAlertDialog(
+        scrollable = false,
         onDismissRequest = onDismiss,
         title = { Text(if (existingSub != null) "Aboneliği Düzenle" else "Yeni Abonelik") },
         text = {
@@ -418,14 +442,7 @@ fun SubscriptionDialog(
                     }
                 }
                 item {
-                    OutlinedTextField(
-                        value = effectiveMonthText,
-                        onValueChange = { effectiveMonthText = it },
-                        label = { Text("Fiyatın Başladığı Ay (YYYY-MM)") },
-                        isError = priceChanged && month == null,
-                        supportingText = { if (priceChanged && month == null) Text("Fiyat değişikliği için geçerli ay seçilmelidir.") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    MonthField(label = "Fiyatın başladığı ay", value = runCatching { java.time.YearMonth.parse(effectiveMonthText) }.getOrNull(), onChange = { effectiveMonthText = it?.toString().orEmpty() }, modifier = Modifier.fillMaxWidth())
                 }
                 item {
                     OutlinedTextField(
@@ -592,7 +609,7 @@ fun SubscriptionDialog(
     )
 
     if (existingSub != null && showCancelConfirm) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showCancelConfirm = false },
             title = { Text("Aboneliği İptal Et") },
             text = { Text("${currentMonth} ayından itibaren planlanan abonelik ödemeleri durdurulacak. Geçmiş harcamalar silinmez.") },
@@ -602,7 +619,7 @@ fun SubscriptionDialog(
     }
 
     if (existingSub != null && showDeactivateConfirm) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showDeactivateConfirm = false },
             title = { Text("Aboneliği Pasifleştir") },
             text = { Text("Bu abonelik gelecekte planlanan ödemelerde görünmeyecek. Geçmiş harcamalar korunur.") },
@@ -612,7 +629,7 @@ fun SubscriptionDialog(
     }
 
     if (existingSub != null && showDeleteConfirm) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Aboneliği Sil") },
             text = { Text("Bu işlem aboneliği ve fiyat geçmişini kaldırabilir. Bağlı geçmiş harcama varsa silme engellenir.") },

@@ -1,5 +1,9 @@
 package com.umit.budgettracker.feature.installments
 
+import com.umit.budgettracker.core.ui.components.DetailScaffold
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,26 +34,10 @@ fun InstallmentsScreen(
     val state by viewModel.uiState.collectAsState()
     val showCompleted by viewModel.showCompleted.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Taksitler")
-                        Text(
-                            "Taksitli alışverişler ve kalan ödemeler",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
-                    }
-                }
-            )
-        }
+    DetailScaffold(
+        title = "Taksitler",
+        subtitle = "Taksitli alışverişler ve kalan ödemeler",
+        onBack = onBack,
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -110,6 +98,7 @@ fun InstallmentsScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun InstallmentGroupRow(progress: InstallmentProgress, onDelete: () -> Unit) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -148,11 +137,12 @@ fun InstallmentGroupRow(progress: InstallmentProgress, onDelete: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().height(6.dp),
                 trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
                     "Toplam ${MoneyFormatter.format(group.totalAmount)}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 12.dp)
                 )
                 Text(
                     if (progress.isCompleted) {
@@ -167,7 +157,7 @@ fun InstallmentGroupRow(progress: InstallmentProgress, onDelete: () -> Unit) {
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Taksit Grubunu Sil") },
             text = { Text("Bu taksit grubunu ve tüm ilgili harcamaları silmek istediğinizden emin misiniz?") },

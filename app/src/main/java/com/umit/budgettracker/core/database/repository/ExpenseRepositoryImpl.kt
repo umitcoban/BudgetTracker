@@ -44,6 +44,8 @@ class ExpenseRepositoryImpl @Inject constructor(
         expenseDao.insert(expense.toEntity())
     }
 
+    override suspend fun insertExpenseReturningId(expense: Expense): Long = expenseDao.insert(expense.toEntity())
+
     override suspend fun updateExpense(expense: Expense) {
         expenseDao.update(expense.toEntity())
     }

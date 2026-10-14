@@ -18,6 +18,17 @@ data class MonthlyBudgetSummary(
     val loanPaymentAmount: Long = 0,
     val fixedExpenseAmount: Long = 0,
     val suggestedSavingAmount: Long = 0,
+    /**
+     * Obligations that would continue without discretionary spending: rent/bill categories,
+     * paid and unpaid subscriptions, loans, fixed expenses and installments. Feeds the emergency
+     * fund estimate.
+     */
+    val essentialExpenseAmount: Long = 0,
+    /** Planning-month spending not linked to a subscription, loan, fixed expense or installment. */
+    val variableExpenseAmount: Long = 0,
+    val subscriptionPayments: List<SubscriptionMonthlyPayment> = emptyList(),
+    val loanPayments: List<LoanMonthlyPayment> = emptyList(),
+    val fixedExpensePayments: List<FixedExpenseMonthlyPayment> = emptyList(),
     val categorySummaries: List<CategorySummary> = emptyList(),
     val warnings: List<BudgetWarning> = emptyList()
 ) {
@@ -42,7 +53,10 @@ data class CategorySummary(
 data class BudgetWarning(
     val type: BudgetWarningType,
     val message: String
-)
+) {
+    /** Good-news insights share the list (lowest priority) but must not be styled as alerts. */
+    val isPositive: Boolean get() = type == BudgetWarningType.POSITIVE_TREND
+}
 
 enum class BudgetWarningType {
     NEGATIVE_REMAINING,
@@ -50,5 +64,8 @@ enum class BudgetWarningType {
     CATEGORY_LIMIT_EXCEEDED,
     UPCOMING_CARD_PAYMENT,
     UPCOMING_LOAN_PAYMENT,
-    CATEGORY_SPENDING_SPIKE
+    CATEGORY_SPENDING_SPIKE,
+    POSSIBLE_DUPLICATE_EXPENSE,
+    SUBSCRIPTION_PRICE_INCREASE,
+    POSITIVE_TREND
 }
