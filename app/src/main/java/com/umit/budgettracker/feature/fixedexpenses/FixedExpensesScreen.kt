@@ -52,6 +52,7 @@ import com.umit.budgettracker.core.domain.model.Category
 import com.umit.budgettracker.core.domain.model.FixedExpense
 import com.umit.budgettracker.core.domain.model.PaymentAccount
 import com.umit.budgettracker.core.ui.IconMapper
+import com.umit.budgettracker.core.util.DateUtils
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
 import java.math.BigDecimal
@@ -123,7 +124,7 @@ fun FixedExpensesScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(fixedExpenses) { expense ->
@@ -174,8 +175,11 @@ private fun FixedExpenseRow(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(expense.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    // The amount sits under the title: beside it, it left the title a narrow column.
+                    Text(MoneyFormatter.format(expense.amount), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     Text(
-                        text = "Her ay ${expense.dayOfMonth}. gün • ${expense.startMonth}${expense.endMonth?.let { " - $it" } ?: ""}",
+                        text = "Her ay ${expense.dayOfMonth}. gün • " + (expense.endMonth?.let { "${DateUtils.formatMonthYear(expense.startMonth)} – ${DateUtils.formatMonthYear(it)}" }
+                            ?: "Başlangıç: ${DateUtils.formatMonthYear(expense.startMonth)}"),
                         style = MaterialTheme.typography.bodySmall
                     )
                     if (!expense.isActive) {
@@ -187,7 +191,6 @@ private fun FixedExpenseRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(MoneyFormatter.format(expense.amount), fontWeight = FontWeight.Bold)
                 IconButton(onClick = onEdit) {
                     Icon(Icons.Default.Edit, contentDescription = "Düzenle")
                 }
@@ -199,7 +202,7 @@ private fun FixedExpenseRow(
                 onClick = onMarkAsPaid,
                 modifier = Modifier.align(Alignment.End)
             ) {
-                Text("Harcamalara İşle")
+                Text("Harcamalara işle")
             }
         }
     }

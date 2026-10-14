@@ -50,7 +50,8 @@ fun CategoriesScreen(
         }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding)
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(bottom = 96.dp)
         ) {
             if (categories.isEmpty()) {
                 item {

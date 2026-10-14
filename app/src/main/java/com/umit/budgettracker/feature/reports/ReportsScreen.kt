@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.reports
 
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -123,16 +124,18 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                     Spacer(Modifier.height(8.dp))
-                    PrimaryTabRow(
+                    // Scrollable: with large fonts the fixed-width tabs broke "Harcamalar" in two.
+                    PrimaryScrollableTabRow(
                         selectedTabIndex = selectedTab,
                         containerColor = MaterialTheme.colorScheme.background,
+                        edgePadding = 0.dp,
                         divider = {}
                     ) {
                         reportTabs.forEachIndexed { index, title ->
                             Tab(
                                 selected = selectedTab == index,
                                 onClick = { selectedTab = index },
-                                text = { Text(title, style = MaterialTheme.typography.labelLarge) }
+                                text = { Text(title, style = MaterialTheme.typography.labelLarge, maxLines = 1) }
                             )
                         }
                     }

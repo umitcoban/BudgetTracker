@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.umit.budgettracker.core.domain.model.*
 import com.umit.budgettracker.core.ui.IconMapper
+import com.umit.budgettracker.core.util.DateUtils
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
 import java.math.BigDecimal
@@ -86,7 +87,7 @@ fun SubscriptionsScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(monthlyPayments) { payment ->
@@ -190,34 +191,42 @@ fun SubscriptionPaymentRow(
             containerColor = if (payment.isPaid) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer
         )
     ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = payment.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                val billingDate = selectedMonth.atDay(payment.billingDay.coerceAtMost(selectedMonth.lengthOfMonth()))
-                Text(text = "Ödeme tarihi: $billingDate • ${payment.category?.name ?: "-"}", style = MaterialTheme.typography.bodySmall)
-                Text(
-                    text = if (payment.isPaid) "Harcamalara işlendi" else "Planlandı",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (payment.isPaid) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
-                )
-                Text(text = MoneyFormatter.format(payment.amount), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                if (payment.originalCurrency != null && payment.originalAmount != null) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = payment.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    val billingDate = selectedMonth.atDay(payment.billingDay.coerceAtMost(selectedMonth.lengthOfMonth()))
                     Text(
-                        text = "${payment.originalAmount.formatMinor()} ${payment.originalCurrency} • Güncel TL karşılığı",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Ödeme: ${DateUtils.formatDayMonth(billingDate)} • ${payment.category?.name ?: "-"}",
+                        style = MaterialTheme.typography.bodySmall
                     )
+                    Text(
+                        text = if (payment.isPaid) "Harcamalara işlendi" else "Planlandı",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (payment.isPaid) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
+                    )
+                    Text(text = MoneyFormatter.format(payment.amount), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    if (payment.originalCurrency != null && payment.originalAmount != null) {
+                        Text(
+                            text = "${payment.originalAmount.formatMinor()} ${payment.originalCurrency} • Güncel TL karşılığı",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (payment.isPaid) {
+                    Icon(Icons.Default.Check, contentDescription = "Ödendi", tint = Color(0xFF4CAF50))
+                }
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Default.Edit, contentDescription = "Düzenle")
                 }
             }
-            if (payment.isPaid) {
-                Icon(Icons.Default.Check, contentDescription = "Ödendi", tint = Color(0xFF4CAF50))
-            } else {
-                Button(onClick = onMarkPaid) {
-                    Text("${selectedMonth} Harcamalara İşle")
+            // The action sits on its own line: next to the title it took the whole width and
+            // squeezed the title to one letter per line.
+            if (!payment.isPaid) {
+                Button(onClick = onMarkPaid, modifier = Modifier.align(Alignment.End).padding(top = 8.dp)) {
+                    Text("Harcamalara işle")
                 }
-            }
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Default.Edit, contentDescription = "Düzenle")
             }
         }
     }
