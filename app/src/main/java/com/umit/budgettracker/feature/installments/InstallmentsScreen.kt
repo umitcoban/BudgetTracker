@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.installments
 
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -167,7 +168,7 @@ fun InstallmentGroupRow(progress: InstallmentProgress, onDelete: () -> Unit) {
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Taksit Grubunu Sil") },
             text = { Text("Bu taksit grubunu ve tüm ilgili harcamaları silmek istediğinizden emin misiniz?") },

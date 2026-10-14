@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.salary
 
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -166,7 +167,7 @@ fun SalaryRuleDialog(
     val payDayValid = payDayText.isBlank() || payDay in 1..31
     val isValid = (amount ?: 0L) > 0 && month != null && payDayValid
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (existingRule == null) "Maaşı Güncelle" else "Maaş Kuralını Düzenle") },
         text = {

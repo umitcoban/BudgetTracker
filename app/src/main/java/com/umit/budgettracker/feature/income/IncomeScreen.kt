@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.income
 
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +19,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -257,7 +257,7 @@ private fun IncomeRow(
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Geliri Sil") },
             text = { Text("Bu gelir kaydını silmek istediğinizden emin misiniz?") },
@@ -332,7 +332,7 @@ private fun IncomeDialog(
     val incomeDate = runCatching { LocalDate.parse(incomeDateText, dateFormatter) }.getOrNull()
     val isValid = title.isNotBlank() && (amount ?: 0L) > 0 && incomeDate != null
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (existingIncome == null) "Gelir Ekle" else "Geliri Düzenle") },
         text = {

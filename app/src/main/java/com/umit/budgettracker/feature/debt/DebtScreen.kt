@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.debt
 
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -106,7 +107,7 @@ fun AddDebtDialog(onDismiss: () -> Unit, onConfirm: (String, String?, Long, Debt
     var amountText by remember { mutableStateOf("") }
     var type by remember { mutableStateOf(DebtType.I_OWE) }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Yeni Borç/Alacak") },
         text = {

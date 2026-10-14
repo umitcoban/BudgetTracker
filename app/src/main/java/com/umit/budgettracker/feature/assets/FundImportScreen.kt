@@ -19,10 +19,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.umit.budgettracker.core.domain.calculator.AssetValuationRules
+import com.umit.budgettracker.core.domain.calculator.FundMovementRules
+import com.umit.budgettracker.core.domain.calculator.FundPosition
 import com.umit.budgettracker.core.domain.usecase.ImportFundPortfolioUseCase
 import com.umit.budgettracker.core.ocr.DocumentTextExtractor
+import com.umit.budgettracker.core.parsing.FundMovementParser
 import com.umit.budgettracker.core.parsing.FundParseResult
 import com.umit.budgettracker.core.parsing.FundPortfolioParser
+import com.umit.budgettracker.core.parsing.OcrLayout
 import com.umit.budgettracker.core.ui.components.*
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.core.util.ValueFormats
@@ -31,7 +35,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
+
+/** Set when the text was a transaction history ("Fon Hareketleri") rather than a portfolio table. */
+data class FundHistorySummary(val movementCount: Int, val from: LocalDate, val to: LocalDate, val positions: List<FundPosition>) {
+    val incompleteCodes: List<String> get() = positions.filter { it.incompleteHistory }.map { it.code }
+    val realizedProfit: Long get() = positions.sumOf { it.realizedProfit }
+}
 
 @HiltViewModel
 class FundImportViewModel @Inject constructor(
@@ -42,6 +54,8 @@ class FundImportViewModel @Inject constructor(
     val text: StateFlow<String> = _text.asStateFlow()
     private val _result = MutableStateFlow<FundParseResult?>(null)
     val result: StateFlow<FundParseResult?> = _result.asStateFlow()
+    private val _history = MutableStateFlow<FundHistorySummary?>(null)
+    val history: StateFlow<FundHistorySummary?> = _history.asStateFlow()
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
     private val _message = MutableStateFlow<String?>(null)
@@ -52,19 +66,38 @@ class FundImportViewModel @Inject constructor(
     fun setText(value: String) {
         _text.value = value
         _result.value = null
+        _history.value = null
     }
 
+    /** A transaction history wins when it has rows; otherwise the text is read as a portfolio table. */
     fun parse() {
+        val movements = FundMovementParser.parse(_text.value)
+        if (movements.movements.isNotEmpty()) {
+            val positions = FundMovementRules.positions(movements.movements)
+            _history.value = FundHistorySummary(
+                movementCount = movements.movements.size,
+                from = movements.movements.minOf { it.date },
+                to = movements.movements.maxOf { it.date },
+                positions = positions
+            )
+            _result.value = FundParseResult(FundMovementRules.toRows(positions), movements.unreadLines)
+            return
+        }
+        _history.value = null
         _result.value = FundPortfolioParser.parse(_text.value).also {
             if (it.rows.isEmpty()) _message.value = "Tabloda fon satırı bulunamadı. Kod, adet, fiyat ve tutar sütunlarının olduğundan emin ol."
         }
     }
 
-    /** OCR / file read happens on device; the text is shown so the user can fix OCR mistakes. */
+    /**
+     * Screenshots are rebuilt row by row from the OCR boxes ([OcrLayout.anchoredRows]), because a
+     * broker table row spans several text lines. Files go through the generic extractor. The text
+     * is shown so the user can fix OCR mistakes.
+     */
     fun load(uri: Uri) {
         viewModelScope.launch {
             _busy.value = true
-            runCatching { extractor.extract(uri) }
+            runCatching { if (extractor.isImage(uri)) screenshotText(uri) else extractor.extract(uri) }
                 .onSuccess {
                     _text.value = it
                     parse()
@@ -72,6 +105,12 @@ class FundImportViewModel @Inject constructor(
                 .onFailure { _message.value = "Dosya okunamadı." }
             _busy.value = false
         }
+    }
+
+    private suspend fun screenshotText(uri: Uri): String {
+        val lines = extractor.recognizeLines(uri)
+        val anchored = OcrLayout.anchoredRows(lines).joinToString("\n")
+        return if (FundPortfolioParser.parse(anchored).rows.isNotEmpty()) anchored else OcrLayout.rows(lines).joinToString("\n")
     }
 
     fun apply(codes: Set<String>, updateHoldings: Boolean) {
@@ -95,6 +134,7 @@ fun FundImportScreen(
 ) {
     val text by viewModel.text.collectAsState()
     val result by viewModel.result.collectAsState()
+    val history by viewModel.history.collectAsState()
     val busy by viewModel.busy.collectAsState()
     val message by viewModel.message.collectAsState()
     val done by viewModel.done.collectAsState()
@@ -116,7 +156,7 @@ fun FundImportScreen(
 
     DetailScaffold(
         title = "Fon İçe Aktar",
-        subtitle = "Ekran görüntüsü, PDF, Excel/CSV veya metin",
+        subtitle = "Portföy ekran görüntüsü, fon hareketleri (Excel) veya metin",
         onBack = onBack,
         snackbarHostState = snackbar,
         bottomBar = {
@@ -124,7 +164,7 @@ fun FundImportScreen(
             if (rows.isNotEmpty()) {
                 Surface(tonalElevation = 3.dp) {
                     Row(
-                        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
+                        Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(Modifier.weight(1f)) {
@@ -170,8 +210,10 @@ fun FundImportScreen(
                     label = { Text("Tablo metni (yapıştır veya düzelt)") },
                     placeholder = { Text("GTL  50.123  7.018,07  0,140017  +700,40") },
                     textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    minLines = 5,
-                    maxLines = 12,
+                    // Once read, the text shrinks so the preview below stays reachable on short
+                    // screens (the field would otherwise fill the screen and take every scroll).
+                    minLines = if (result == null) 5 else 3,
+                    maxLines = if (result == null) 12 else 4,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -188,6 +230,7 @@ fun FundImportScreen(
             }
             result?.let { parsed ->
                 if (parsed.rows.isNotEmpty()) {
+                    history?.let { summary -> item { HistoryCard(summary) } }
                     item {
                         FinanceSectionHeader(
                             title = "Önizleme",
@@ -199,7 +242,9 @@ fun FundImportScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text("Eldeki adet ve maliyeti güncelle", style = MaterialTheme.typography.bodyMedium)
-                                Text("Kapalıysa yalnızca fiyatlar kaydedilir", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    if (history != null) "Kapalıysa yalnızca fiyatlar kaydedilir. Tamamen satılan fonlar kapatılır." else "Kapalıysa yalnızca fiyatlar kaydedilir",
+                                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Switch(checked = updateHoldings, onCheckedChange = { updateHoldings = it })
                         }
@@ -212,11 +257,22 @@ fun FundImportScreen(
                                 Spacer(Modifier.width(8.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(row.code, style = MaterialTheme.typography.titleSmall)
+                                    row.name?.let {
+                                        Text(it, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                    }
                                     Text(
-                                        "${ValueFormats.quantity(row.quantity)} pay × ${ValueFormats.price(row.price, "FUND:")}",
+                                        if (row.quantity == 0L) "Tamamı satıldı" else "${ValueFormats.quantity(row.quantity)} pay × ${ValueFormats.price(row.price, "FUND:")}" +
+                                            (row.priceDate?.let { " (${it.format(DayFormat)})" } ?: ""),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                    row.realizedProfit?.let { realized ->
+                                        Text(
+                                            "Gerçekleşen ${ValueFormats.signedMoney(realized)}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (realized >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                        )
+                                    }
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
                                     Text(MoneyFormatter.format(row.value), style = MaterialTheme.typography.titleSmall)
@@ -245,6 +301,34 @@ fun FundImportScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+private val DayFormat = DateTimeFormatter.ofPattern("dd.MM.yyyy")
+
+@Composable
+private fun HistoryCard(summary: FundHistorySummary) {
+    FinanceCard {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("İşlem geçmişi", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "${summary.movementCount} hareket, ${summary.from.format(DayFormat)} – ${summary.to.format(DayFormat)}. " +
+                    "Adet ve maliyet alım/satımlardan ortalama maliyetle hesaplandı; fiyat, fonun son işlem günündeki fiyatıdır " +
+                    "(fiyatları yenileyince güncellenir).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (summary.realizedProfit != 0L) {
+                Text("Satışlardan gerçekleşen: ${ValueFormats.signedMoney(summary.realizedProfit)}", style = MaterialTheme.typography.bodySmall)
+            }
+            if (summary.incompleteCodes.isNotEmpty()) {
+                Text(
+                    "${summary.incompleteCodes.joinToString()}: dosyadaki satış, dosyadaki alımlardan fazla. Geçmiş eksik; bu fonların adedini portföy ekran görüntüsüyle doğrula.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
             }
         }
     }

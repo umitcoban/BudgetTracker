@@ -342,8 +342,9 @@ private fun AppPickerDialog(
 ) {
     var chosen by remember { mutableStateOf(selected) }
     var query by remember { mutableStateOf("") }
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
+        scrollable = false,
         title = { Text("Banka / cüzdan uygulamaları") },
         text = {
             Column {

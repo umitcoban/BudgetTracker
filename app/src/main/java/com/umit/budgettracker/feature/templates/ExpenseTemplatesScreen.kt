@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.templates
 
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -95,7 +96,7 @@ fun AddTemplateDialog(
     var amountText by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(categories.firstOrNull()) }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Yeni Şablon") },
         text = {

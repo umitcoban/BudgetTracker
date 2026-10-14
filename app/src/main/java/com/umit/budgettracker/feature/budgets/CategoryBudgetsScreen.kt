@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.budgets
 
+import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -156,7 +157,7 @@ fun CategoryBudgetDialog(
     var selectedCategory by remember { mutableStateOf(existingBudget?.category ?: categories.firstOrNull()) }
     var expanded by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (existingBudget != null) "Bütçeyi Düzenle" else "Yeni Bütçe") },
         text = {
