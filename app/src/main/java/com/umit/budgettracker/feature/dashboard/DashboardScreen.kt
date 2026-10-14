@@ -1,5 +1,7 @@
 package com.umit.budgettracker.feature.dashboard
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -414,6 +416,7 @@ private fun IncomeManagementRow(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BalanceHeroCard(
     summary: MonthlyBudgetSummary,
@@ -469,9 +472,12 @@ private fun BalanceHeroCard(
                 color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f)
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f))
-            Row(
+            // FlowRow: with large fonts the three amounts move to a second line instead of
+            // running into each other.
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 HeroMetric("Gelir", MoneyFormatter.format(summary.totalIncomeAmount))
                 HeroMetric("Harcama", MoneyFormatter.format(summary.totalExpenseAmount))
@@ -483,7 +489,7 @@ private fun BalanceHeroCard(
 
 @Composable
 private fun HeroMetric(label: String, value: String) {
-    Column {
+    Column(Modifier.padding(end = 12.dp)) {
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,

@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -166,7 +167,7 @@ fun MainScreen(pendingRoute: MutableStateFlow<String?>) {
                         NavigationBarItem(
                             icon = { Icon(screen.icon, contentDescription = null) },
                             // One line even on 360dp screens ("Harcamalar" used to wrap).
-                            label = { Text(screen.title, maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall) },
+                            label = { Text(screen.title, maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)) },
                             selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                             onClick = {
                                 navController.navigateToTopLevelDestination(screen)

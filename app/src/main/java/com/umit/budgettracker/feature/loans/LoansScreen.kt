@@ -4,6 +4,9 @@ import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +24,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,6 +58,7 @@ import com.umit.budgettracker.core.domain.model.Loan
 import com.umit.budgettracker.core.domain.model.PaymentAccount
 import com.umit.budgettracker.core.ui.IconMapper
 import com.umit.budgettracker.core.domain.model.LoanPayment
+import com.umit.budgettracker.core.util.DateUtils
 import com.umit.budgettracker.core.util.MoneyFormatter
 import com.umit.budgettracker.feature.dashboard.MonthSelector
 import java.time.YearMonth
@@ -129,7 +134,7 @@ fun LoansScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(loans, key = { it.id }) { loan ->
@@ -215,6 +220,7 @@ fun LoansScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LoanRow(
     loan: Loan,
@@ -239,14 +245,14 @@ private fun LoanRow(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text(loan.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
                         "Aylık ödeme: ${MoneyFormatter.format(loan.monthlyPaymentAmount)}",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        "Taksit sayısı: ${loan.installmentCount} • Başlangıç: ${loan.startMonth}",
+                        "Taksit sayısı: ${loan.installmentCount} • Başlangıç: ${DateUtils.formatMonthYear(loan.startMonth)}",
                         style = MaterialTheme.typography.bodySmall
                     )
                     val status = when {
@@ -268,25 +274,26 @@ private fun LoanRow(
                 }
             }
             if (loan.isActive) {
-                Row(
+                // FlowRow: the two actions wrap to a second line on narrow screens instead of
+                // squeezing a button into one letter per line.
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    OutlinedButton(onClick = onCloseEarly) { Text("Erken kapat") }
                     if (isPaidForSelectedMonth) {
-                        Text(
-                            text = "${selectedMonth} ödemesi yapıldı",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.align(Alignment.CenterVertically)
-                        )
-                    } else {
-                        TextButton(onClick = onMarkPaymentAsPaid) {
-                            Text("${selectedMonth} ödemesini işaretle")
+                        Row(Modifier.align(Alignment.CenterVertically).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                            Text(
+                                text = "${DateUtils.formatMonthYear(selectedMonth)} ödendi",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(start = 6.dp)
+                            )
                         }
-                    }
-                    Button(onClick = onCloseEarly, modifier = Modifier.padding(start = 8.dp)) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null)
-                        Text("Erken Kapat", modifier = Modifier.padding(start = 8.dp))
+                    } else {
+                        Button(onClick = onMarkPaymentAsPaid) { Text("Ödendi işaretle") }
                     }
                 }
             }
@@ -298,7 +305,7 @@ private fun LoanRow(
                 )
                 payments.take(3).forEach { payment ->
                     Text(
-                        text = "${payment.paymentMonth}: ${MoneyFormatter.format(payment.amount)} • ${payment.paidAt.format(closeDateFormatter)}",
+                        text = "${DateUtils.formatMonthYear(payment.paymentMonth)}: ${MoneyFormatter.format(payment.amount)} • ${payment.paidAt.format(closeDateFormatter)} ödendi",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

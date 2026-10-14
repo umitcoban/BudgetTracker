@@ -187,12 +187,13 @@ fun HeroCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HeroMetricRow(items: List<Pair<String, String>>) {
     HorizontalDivider(color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items.forEach { (label, value) ->
-            Column {
+            Column(Modifier.padding(end = 12.dp)) {
                 Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.66f))
                 Spacer(Modifier.height(3.dp))
                 Text(value, style = MaterialTheme.typography.titleSmall)

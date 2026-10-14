@@ -1,5 +1,7 @@
 package com.umit.budgettracker.feature.installments
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -111,6 +113,7 @@ fun InstallmentsScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun InstallmentGroupRow(progress: InstallmentProgress, onDelete: () -> Unit) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -149,11 +152,12 @@ fun InstallmentGroupRow(progress: InstallmentProgress, onDelete: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().height(6.dp),
                 trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
                     "Toplam ${MoneyFormatter.format(group.totalAmount)}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 12.dp)
                 )
                 Text(
                     if (progress.isCompleted) {
