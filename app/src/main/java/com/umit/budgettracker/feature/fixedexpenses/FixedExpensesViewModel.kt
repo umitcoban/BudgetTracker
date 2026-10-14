@@ -6,12 +6,16 @@ import com.umit.budgettracker.core.domain.model.Category
 import com.umit.budgettracker.core.domain.model.FixedExpense
 import com.umit.budgettracker.core.domain.model.PaymentAccount
 import com.umit.budgettracker.core.domain.repository.CategoryRepository
+import com.umit.budgettracker.core.domain.repository.ExpenseRepository
 import com.umit.budgettracker.core.domain.repository.FixedExpenseRepository
 import com.umit.budgettracker.core.domain.repository.PaymentAccountRepository
 import com.umit.budgettracker.core.domain.usecase.MarkFixedExpenseAsPaidResult
 import com.umit.budgettracker.core.domain.usecase.MarkFixedExpenseAsPaidUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,10 +29,18 @@ class FixedExpensesViewModel @Inject constructor(
     private val repository: FixedExpenseRepository,
     categoryRepository: CategoryRepository,
     accountRepository: PaymentAccountRepository,
-    private val markFixedExpenseAsPaid: MarkFixedExpenseAsPaidUseCase
+    private val markFixedExpenseAsPaid: MarkFixedExpenseAsPaidUseCase,
+    expenseRepository: ExpenseRepository
 ) : ViewModel() {
     private val _selectedMonth = MutableStateFlow(YearMonth.now())
     val selectedMonth: StateFlow<YearMonth> = _selectedMonth.asStateFlow()
+
+    /** Fixed expenses already processed into expenses dated in the selected month. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val processedIds: StateFlow<Set<Long>> = _selectedMonth
+        .flatMapLatest { month -> expenseRepository.observeExpensesForMonth(month) }
+        .map { expenses -> expenses.mapNotNull { it.fixedExpenseId }.toSet() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     val fixedExpenses: StateFlow<List<FixedExpense>> = repository.observeAllFixedExpenses()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

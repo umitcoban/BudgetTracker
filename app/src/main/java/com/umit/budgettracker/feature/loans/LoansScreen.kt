@@ -1,5 +1,13 @@
 package com.umit.budgettracker.feature.loans
 
+import com.umit.budgettracker.core.ui.components.DateField
+import com.umit.budgettracker.core.ui.components.MonthField
+import androidx.compose.material.icons.filled.AccountBalance
+import com.umit.budgettracker.core.ui.components.FinanceSectionHeader
+import com.umit.budgettracker.core.ui.components.EmptyState
+import com.umit.budgettracker.core.ui.components.DetailScaffold
+import com.umit.budgettracker.core.domain.calculator.LoanPaymentRules
+import com.umit.budgettracker.core.domain.calculator.LoanMonthStatus
 import com.umit.budgettracker.core.ui.components.AppAlertDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -91,28 +99,33 @@ fun LoansScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text("Krediler") },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
-                        }
-                    }
-                )
-                MonthSelector(
-                    selectedMonth = selectedMonth,
-                    onMonthChange = viewModel::previousMonth,
-                    onNextMonth = viewModel::nextMonth,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
-                )
-            }
+    val grouped = loans.groupBy { LoanPaymentRules.statusFor(it, selectedMonth, it.id in paidLoanIds) }
+    val due = grouped[LoanMonthStatus.DUE].orEmpty()
+    val paid = grouped[LoanMonthStatus.PAID].orEmpty()
+    val inactive = grouped[LoanMonthStatus.NOT_STARTED].orEmpty() + grouped[LoanMonthStatus.FINISHED].orEmpty() +
+        grouped[LoanMonthStatus.CLOSED].orEmpty()
+    var showInactive by remember { mutableStateOf(false) }
+
+    @Composable
+    fun LoanItem(loan: Loan) = LoanRow(
+        loan = loan,
+        status = LoanPaymentRules.statusFor(loan, selectedMonth, loan.id in paidLoanIds),
+        onEdit = {
+            editingLoan = loan
+            showLoanDialog = true
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        selectedMonth = selectedMonth,
+        payments = paymentsByLoanId[loan.id].orEmpty(),
+        onMarkPaymentAsPaid = { viewModel.markPaymentAsPaid(loan) },
+        onCloseEarly = { loanToClose = loan },
+        onDelete = { loanToDelete = loan }
+    )
+
+    DetailScaffold(
+        title = "Krediler",
+        subtitle = "Taksitler ve ödeme durumu",
+        onBack = onBack,
+        snackbarHostState = snackbarHostState,
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
@@ -124,34 +137,52 @@ fun LoansScreen(
             }
         }
     ) { padding ->
-        if (loans.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Henüz kredi eklenmemiş.")
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                MonthSelector(
+                    selectedMonth = selectedMonth,
+                    onMonthChange = viewModel::previousMonth,
+                    onNextMonth = viewModel::nextMonth,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(loans, key = { it.id }) { loan ->
-                    LoanRow(
-                        loan = loan,
-                        onEdit = {
-                            editingLoan = loan
-                            showLoanDialog = true
-                        },
-                        selectedMonth = selectedMonth,
-                        isPaidForSelectedMonth = loan.id in paidLoanIds,
-                        payments = paymentsByLoanId[loan.id].orEmpty(),
-                        onMarkPaymentAsPaid = { viewModel.markPaymentAsPaid(loan) },
-                        onCloseEarly = { loanToClose = loan },
-                        onDelete = { loanToDelete = loan }
+            if (loans.isEmpty()) {
+                item {
+                    EmptyState(
+                        icon = Icons.Default.AccountBalance,
+                        title = "Henüz kredi yok",
+                        message = "Kredini ekle; aylık taksit plana ve nakit akışına otomatik girer."
                     )
                 }
+            }
+            if (due.isNotEmpty()) {
+                item { FinanceSectionHeader(title = "Bu ay ödenecek", subtitle = "${due.size} kredi · ${MoneyFormatter.format(due.sumOf { it.monthlyPaymentAmount })}") }
+                items(due, key = { it.id }) { LoanItem(it) }
+            }
+            if (paid.isNotEmpty()) {
+                item { FinanceSectionHeader(title = "Bu ay ödendi", subtitle = "${paid.size} kredi") }
+                items(paid, key = { it.id }) { LoanItem(it) }
+            }
+            if (loans.isNotEmpty() && due.isEmpty() && paid.isEmpty()) {
+                item {
+                    Text(
+                        "${DateUtils.formatMonthYear(selectedMonth)} için ödenecek kredi taksiti yok.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            if (inactive.isNotEmpty()) {
+                item {
+                    TextButton(onClick = { showInactive = !showInactive }) {
+                        Text("Biten, kapatılan ve başlamamış (${inactive.size}) " + if (showInactive) "▲" else "▼")
+                    }
+                }
+                if (showInactive) items(inactive, key = { it.id }) { LoanItem(it) }
             }
         }
     }
@@ -224,9 +255,9 @@ fun LoansScreen(
 @Composable
 private fun LoanRow(
     loan: Loan,
+    status: LoanMonthStatus,
     onEdit: () -> Unit,
     selectedMonth: YearMonth,
-    isPaidForSelectedMonth: Boolean,
     payments: List<LoanPayment>,
     onMarkPaymentAsPaid: () -> Unit,
     onCloseEarly: () -> Unit,
@@ -255,15 +286,22 @@ private fun LoanRow(
                         "Taksit sayısı: ${loan.installmentCount} • Başlangıç: ${DateUtils.formatMonthYear(loan.startMonth)}",
                         style = MaterialTheme.typography.bodySmall
                     )
-                    val status = when {
-                        loan.closedAt != null -> "Erken kapatıldı • ${loan.closedAt.format(closeDateFormatter)}"
-                        loan.isActive -> "Aktif"
-                        else -> "Pasif"
+                    val number = LoanPaymentRules.installmentNumber(loan, selectedMonth)
+                    val statusText = when (status) {
+                        LoanMonthStatus.CLOSED -> loan.closedAt?.let { "Erken kapatıldı • ${it.format(closeDateFormatter)}" } ?: "Pasif"
+                        LoanMonthStatus.FINISHED -> "Tamamlandı • son taksit ${DateUtils.formatMonthYear(LoanPaymentRules.endMonth(loan))}"
+                        LoanMonthStatus.NOT_STARTED -> "Henüz başlamadı"
+                        LoanMonthStatus.DUE, LoanMonthStatus.PAID ->
+                            "$number/${loan.installmentCount}. taksit • kalan ${MoneyFormatter.format((loan.installmentCount - number).toLong() * loan.monthlyPaymentAmount)}"
                     }
                     Text(
-                        status,
+                        statusText,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (loan.isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        color = when (status) {
+                            LoanMonthStatus.DUE -> MaterialTheme.colorScheme.error
+                            LoanMonthStatus.PAID -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
                     )
                 }
                 IconButton(onClick = onEdit) {
@@ -273,7 +311,7 @@ private fun LoanRow(
                     Icon(Icons.Default.Delete, contentDescription = "Sil")
                 }
             }
-            if (loan.isActive) {
+            if (status == LoanMonthStatus.DUE || status == LoanMonthStatus.PAID) {
                 // FlowRow: the two actions wrap to a second line on narrow screens instead of
                 // squeezing a button into one letter per line.
                 FlowRow(
@@ -282,7 +320,7 @@ private fun LoanRow(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     OutlinedButton(onClick = onCloseEarly) { Text("Erken kapat") }
-                    if (isPaidForSelectedMonth) {
+                    if (status == LoanMonthStatus.PAID) {
                         Row(Modifier.align(Alignment.CenterVertically).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                             Text(
@@ -399,12 +437,7 @@ private fun LoanDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                OutlinedTextField(
-                    value = startMonthText,
-                    onValueChange = { startMonthText = it },
-                    label = { Text("Başlangıç Ayı (YYYY-MM)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                MonthField(label = "İlk taksit ayı", value = runCatching { java.time.YearMonth.parse(startMonthText) }.getOrNull(), onChange = { startMonthText = it?.toString().orEmpty() }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = dayText,
                     onValueChange = { dayText = it },

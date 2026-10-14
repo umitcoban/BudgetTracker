@@ -403,40 +403,44 @@ fun LineComparisonChart(
             .pointerInput(points) {
                 detectTapGestures { offset ->
                     if (points < 2) return@detectTapGestures
-                    val step = size.width.toFloat() / (points - 1)
-                    val index = (offset.x / step).let { kotlin.math.round(it).toInt() }.coerceIn(0, points - 1)
+                    val inset = 6.dp.toPx()
+                    val step = (size.width - 2 * inset) / (points - 1)
+                    val index = ((offset.x - inset) / step).let { kotlin.math.round(it).toInt() }.coerceIn(0, points - 1)
                     onSelect(if (index == selectedIndex) null else index)
                 }
             }
     ) {
         if (points < 2) return@Canvas
         val labelHeight = 16.dp.toPx()
+        // Inset by the marker so extreme points are not clipped at the canvas edge.
+        val inset = 6.dp.toPx()
         val plotHeight = size.height - labelHeight
-        val stepX = size.width / (points - 1)
-        fun y(value: Long) = plotHeight * (1f - (value - minValue) / range)
+        val stepX = (size.width - 2 * inset) / (points - 1)
+        fun x(index: Int) = inset + stepX * index
+        fun y(value: Long) = inset + (plotHeight - 2 * inset) * (1f - (value - minValue) / range)
 
         drawLine(baselineColor, Offset(0f, y(0)), Offset(size.width, y(0)), strokeWidth = 1.dp.toPx())
         selectedIndex?.let { index ->
-            drawLine(guideColor, Offset(stepX * index, 0f), Offset(stepX * index, plotHeight), strokeWidth = 1.dp.toPx())
+            drawLine(guideColor, Offset(x(index), 0f), Offset(x(index), plotHeight), strokeWidth = 1.dp.toPx())
         }
         series.forEachIndexed { seriesIndex, values ->
             val color = colors.getOrElse(seriesIndex) { guideColor }
             val path = Path()
             values.forEachIndexed { index, value ->
-                val p = Offset(stepX * index, y(value))
+                val p = Offset(x(index), y(value))
                 if (index == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
             }
             drawPath(path, color, style = Stroke(LineWidth.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
             val markerIndex = selectedIndex ?: values.lastIndex
-            drawCircle(color, 3.5.dp.toPx(), Offset(stepX * markerIndex, y(values[markerIndex])))
+            drawCircle(color, 3.5.dp.toPx(), Offset(x(markerIndex), y(values[markerIndex])))
         }
         // Sparse x labels: first, middle, last (and the selection).
         val labelIndices = (listOf(0, points / 2, points - 1) + listOfNotNull(selectedIndex)).distinct()
         labelIndices.forEach { index ->
             val text = labels.getOrNull(index) ?: return@forEach
             val layout = textMeasurer.measure(text, axisStyle)
-            val x = (stepX * index - layout.size.width / 2f).coerceIn(0f, size.width - layout.size.width)
-            drawText(layout, topLeft = Offset(x, plotHeight + 2.dp.toPx()))
+            val left = (x(index) - layout.size.width / 2f).coerceIn(0f, size.width - layout.size.width)
+            drawText(layout, topLeft = Offset(left, plotHeight + 2.dp.toPx()))
         }
     }
 }

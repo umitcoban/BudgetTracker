@@ -241,6 +241,8 @@ private val hubSections = listOf(
 )
 
 private val recordScreens = listOf(
+    Screen.SalaryManagement,
+    Screen.Income,
     Screen.Categories,
     Screen.Subscriptions,
     Screen.FixedExpenses,
@@ -279,15 +281,6 @@ private fun HubTile(tile: HubTile, modifier: Modifier = Modifier, onClick: () ->
     }
 }
 
-@Composable
-fun SettingsSectionTitle(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(16.dp)
-    )
-}
 
 @Composable
 fun SettingsItem(

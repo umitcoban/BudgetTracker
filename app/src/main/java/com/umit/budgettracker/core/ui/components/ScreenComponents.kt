@@ -1,5 +1,8 @@
 package com.umit.budgettracker.core.ui.components
 
+import java.util.Locale
+import androidx.compose.ui.platform.LocalConfiguration
+import android.content.res.Configuration
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.compose.foundation.BorderStroke
@@ -306,7 +309,25 @@ fun AppDatePickerDialog(
 ) {
     SafeDialog(onDismiss, Modifier.widthIn(max = 360.dp), horizontalMargin = 8.dp) {
         Column {
-            Box(Modifier.weight(1f, fill = false)) { DatePicker(state = state) }
+            // Turkish month and weekday names whatever the device language; the picker's own
+            // title/headline strings come from system resources, so they are given here.
+            val trConfiguration = Configuration(LocalConfiguration.current).apply { setLocale(Locale.forLanguageTag("tr-TR")) }
+            CompositionLocalProvider(LocalConfiguration provides trConfiguration) {
+                Box(Modifier.weight(1f, fill = false)) {
+                    DatePicker(
+                        state = state,
+                        showModeToggle = false,
+                        title = { Text("Tarih seç", modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp)) },
+                        headline = {
+                            Text(
+                                state.selectedDateMillis?.let { DateUtils.formatFullDate(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()) } ?: "Tarih seçilmedi",
+                                style = MaterialTheme.typography.headlineSmall,
+                                modifier = Modifier.padding(start = 24.dp, end = 12.dp, bottom = 12.dp)
+                            )
+                        }
+                    )
+                }
+            }
             DialogButtons(
                 dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } },
                 confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel) } },
