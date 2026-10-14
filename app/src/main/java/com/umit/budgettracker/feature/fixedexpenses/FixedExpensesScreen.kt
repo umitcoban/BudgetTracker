@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.fixedexpenses
 
+import com.umit.budgettracker.core.ui.components.AmountField
 import com.umit.budgettracker.core.ui.components.DateField
 import com.umit.budgettracker.core.ui.components.MonthField
 import androidx.compose.material.icons.filled.EventRepeat
@@ -309,12 +310,7 @@ private fun FixedExpenseDialog(
                     label = { Text("Başlık") },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = it },
-                    label = { Text("Tutar (TL)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                AmountField(value = amountText, onValueChange = { amountText = it }, label = "Tutar", modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = dayText,
                     onValueChange = { dayText = it },

@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.income
 
+import com.umit.budgettracker.core.ui.components.AmountField
 import com.umit.budgettracker.core.ui.components.DetailScaffold
 import com.umit.budgettracker.core.ui.components.DateField
 import com.umit.budgettracker.core.ui.components.MonthField
@@ -327,12 +328,7 @@ private fun IncomeDialog(
                     label = { Text("Başlık") },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = it },
-                    label = { Text("Tutar (TL)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                AmountField(value = amountText, onValueChange = { amountText = it }, label = "Tutar", modifier = Modifier.fillMaxWidth())
                 DateField(label = "Gelirin alındığı tarih", value = incomeDate, onChange = { incomeDateText = it.format(dateFormatter) }, modifier = Modifier.fillMaxWidth())
                 ExposedDropdownMenuBox(
                     expanded = typeExpanded,

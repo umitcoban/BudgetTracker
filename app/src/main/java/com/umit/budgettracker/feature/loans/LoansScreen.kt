@@ -1,5 +1,6 @@
 package com.umit.budgettracker.feature.loans
 
+import com.umit.budgettracker.core.ui.components.AmountField
 import com.umit.budgettracker.core.ui.components.DateField
 import com.umit.budgettracker.core.ui.components.MonthField
 import androidx.compose.material.icons.filled.AccountBalance
@@ -418,12 +419,7 @@ private fun LoanDialog(
                     label = { Text("Başlık") },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = principalText,
-                    onValueChange = { principalText = it },
-                    label = { Text("Anapara (TL)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                AmountField(value = principalText, onValueChange = { principalText = it }, label = "Anapara", modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     value = countText,
                     onValueChange = { countText = it },
